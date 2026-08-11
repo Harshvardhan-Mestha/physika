@@ -106,3 +106,4 @@ Tutorials
 
    linear_solve_gaussian_elimination
    linear_solve_helmholtz_equation
+   lu_decomposition_method
