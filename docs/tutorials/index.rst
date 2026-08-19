@@ -31,6 +31,7 @@ Tutorials
    central_dogma
    selkov_glycolysis
    michaelis_menten
+   goldbeter_koshland
 
 .. toctree::
    :maxdepth: 1
