@@ -10,15 +10,15 @@ def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
 def zero_array(n: ℝ, m: ℝ): ℝ[n, m]:
     return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
 
-class DEQ(W: ℝ[h,h], U: ℝ[din,h], b: ℝ[1,h], Wo: ℝ[h,din], bo: ℝ[1,din]):
-    def f(z: ℝ[1,h], x: ℝ[1,din]): ℝ[1,h]:
+class DEQ(W: ℝ[h,h], U: ℝ[d,h], b: ℝ[1,h], Wo: ℝ[h,d], bo: ℝ[1,d]):
+    def f(z: ℝ[1,h], x: ℝ[1,d]): ℝ[1,h]:
         return tanh(z @ W + x @ U + b)
-    def equilibrium(x: ℝ[1,din]): ℝ[1,h]:
+    def equilibrium(x: ℝ[1,d]): ℝ[1,h]:
         z: ℝ[1,h] = this.b * 0.0
         for k:ℕ(20):
             z = this.f(z, x)
         return z
-    def λ(x: ℝ[1,din]) → ℝ[1,din]:
+    def λ(x: ℝ[1,d]) → ℝ[1,d]:
         z_star: ℝ[1,h] = this.equilibrium(x)
         return z_star @ Wo + bo
     def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
@@ -27,14 +27,14 @@ class DEQ(W: ℝ[h,h], U: ℝ[din,h], b: ℝ[1,h], Wo: ℝ[h,din], bo: ℝ[1,din
     def train(X: ℝ[1000,784], epochs: ℕ, lr: ℝ, images: ℝ):
         for epoch:ℕ(epochs):
             for i:ℕ(images):
-                x: ℝ[1,din] = [X[i]]
+                x: ℝ[1,d] = [X[i]]
                 preds = this(x)
                 L = this.loss(x, preds)
                 grads = grad(L, this.params)
                 this.update_params(lr, grads)
             total = 0
             for i:ℕ(images):
-                x: ℝ[1,din] = [X[i]]
+                x: ℝ[1,d] = [X[i]]
                 pred = this(x)
                 total += this.loss(x, pred)
             print(total / images)
@@ -52,8 +52,10 @@ b: ℝ[1,32] = zero_array(1, 32)
 Wo: ℝ[32,784] = rand_array(32, 784, 0.05)
 bo: ℝ[1,784] = zero_array(1, 784)
 deq = DEQ(W, U, b, Wo, bo)
+
 images: ℝ = 1000
 X: ℝ[1000, 784] = load_mnist(images)
+
 x0: ℝ[1,784] = [X[0]]
 recon_before: ℝ[1,784] = deq(x0)
 loss_before: ℝ = deq.loss(x0, recon_before)
