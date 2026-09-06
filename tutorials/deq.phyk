@@ -1,7 +1,7 @@
 physika.seed(0)
-def tanh(z: ℝ[k,h]): ℝ[k,h]:
-    num: ℝ[k,h] = exp(z) - exp(-z)
-    denom: ℝ[k,h] = exp(z) + exp(-z)
+def tanh(a: ℝ[p,q]): ℝ[p,q]:
+    num: ℝ[p,q] = exp(a) - exp(-a)
+    denom: ℝ[p,q] = exp(a) + exp(-a)
     return num / denom
 
 def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
@@ -10,17 +10,41 @@ def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
 def zero_array(n: ℝ, m: ℝ): ℝ[n, m]:
     return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
 
-class DEQ(W: ℝ[h,h], U: ℝ[d,h], b: ℝ[1,h], Wo: ℝ[h,d], bo: ℝ[1,d]):
-    def f(z: ℝ[1,h], x: ℝ[1,d]): ℝ[1,h]:
-        return tanh(z @ W + x @ U + b)
-    def equilibrium(x: ℝ[1,d]): ℝ[1,h]:
-        z: ℝ[1,h] = this.b * 0.0
-        for k:ℕ(20):
-            z = this.f(z, x)
-        return z
+def eye(n: ℝ): ℝ[n, n]:
+    I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
+    for i:ℕ(n):
+        I[i, i] = 1.0
+    return I
+
+def inv(A: ℝ[n, n]): ℝ[n, n]:
+    M: ℝ[n, n] = A * 1.0           
+    B: ℝ[n, n] = eye(n)        
+    for i:ℕ(n):
+        p: ℝ = M[i, i]
+        mrow: ℝ[n] = M[i, :] / p 
+        brow: ℝ[n] = B[i, :] / p
+        for j:ℕ(n):
+            c: ℝ = M[j, i]
+            M[j, :] = M[j, :] - c * mrow
+            B[j, :] = B[j, :] - c * brow
+        M[i, :] = mrow           
+        B[i, :] = brow
+    return B
+
+class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
+    def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
+        return tanh(h @ W + x @ U + b)
+    def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
+        h: ℝ[1,n] = this.b * 0.0
+        g: ℝ[1,n] = this.f(h, x) - h        
+        Jinv: ℝ[n,n] = inv(grad(g, h))      
+        for k:ℕ(10):
+            g = this.f(h, x) - h
+            h = h - g @ Jinv               
+        return h
     def λ(x: ℝ[1,d]) → ℝ[1,d]:
-        z_star: ℝ[1,h] = this.equilibrium(x)
-        return z_star @ Wo + bo
+        h_star: ℝ[1,n] = this.equilibrium(x)
+        return h_star @ Wo + bo
     def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
         diff: ℝ[1,784] = target - x_hat
         return sum(diff * diff)
