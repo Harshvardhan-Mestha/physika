@@ -38,6 +38,7 @@ Tutorials
 
    fitzhugh_nagumo
    hodgkin_huxley
+   izhikevich
 
 .. toctree::
    :maxdepth: 1
