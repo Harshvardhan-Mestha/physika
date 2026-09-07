@@ -1149,9 +1149,6 @@ Greek Letters
 
 Physika supports Greek letters as valid symbols and variables.
 
-.. note::
-   ``Δ`` (U+0394) is reserved for the Laplacian operator and cannot be used as an identifier.
-
 Uppercase Letters
 ~~~~~~~~~~~~~~~~~
 
@@ -1173,7 +1170,7 @@ Uppercase Letters
      - Gamma
    * - Δ
      - U+0394
-     - Delta *(reserved — Laplacian operator)*
+     - Delta
    * - Ε
      - U+0395
      - Epsilon
