@@ -1002,10 +1002,3 @@ def compl_mul1d(x_ft, weights1):
     torch.Size([8, 16])
     """
     return torch.einsum("ix,iox->ox", x_ft, weights1)
-
-def load_mnist(n=1000):
-    import torch
-    from torchvision import datasets, transforms
-    mnist = datasets.MNIST(root="./data", train=True, download=True, transform=transforms.ToTensor())
-    return torch.stack([mnist[i][0].view(784) for i in range(int(n))]).to(DEVICE)
-

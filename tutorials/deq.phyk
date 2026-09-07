@@ -88,7 +88,6 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
                 x: ℝ[1,d] = [X[i]]
                 preds = this(x)
                 L = this.loss(x, preds)
-                print(L)
                 grads = grad(L, this.params)
                 this.update_params(lr, grads)
             total = 0
@@ -113,14 +112,15 @@ bo: ℝ[1,784] = zeros2d(1, 784)
 deq = DEQ(W, U, b, Wo, bo)
 
 images: ℝ = 10
-X: ℝ[10, 784] = load_mnist(images)
+# X: ℝ[10, 784] = load_mnist(images)      
+X: ℝ[10, 784] = rand_array(10, 784, 1.0)      
 
 x0: ℝ[1,784] = [X[0]]
 recon_before: ℝ[1,784] = deq(x0)
 loss_before: ℝ = deq.loss(x0, recon_before)
 print(loss_before)
 
-epochs: ℕ = 20
+epochs: ℕ = 10
 lr: ℝ = 0.0001
 deq.train(X, epochs, lr, images)
 recon_after: ℝ[1,784] = deq(x0)
