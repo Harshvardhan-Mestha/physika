@@ -7,8 +7,11 @@ def tanh(a: ℝ[p,q]): ℝ[p,q]:
 def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
     return for i:ℕ(n) → for j:ℕ(m) → μ * eps ~ 𝒩(0.0, 1.0)
 
-def zero_array(n: ℝ, m: ℝ): ℝ[n, m]:
+def zeros2d(n: ℝ, m: ℝ): ℝ[n, m]:
     return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
+
+def zeros1d(k: ℝ): ℝ[k]:
+    return for i:ℕ(k) → i * 0.0
 
 def eye(n: ℝ): ℝ[n, n]:
     I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
@@ -16,31 +19,62 @@ def eye(n: ℝ): ℝ[n, n]:
         I[i, i] = 1.0
     return I
 
-def inv(A: ℝ[n, n], m: ℕ): ℝ[n, n]:
-    M: ℝ[n, n] = A * 1.0
-    B: ℝ[n, n] = eye(m)
-    E: ℝ[n, n] = eye(m)
-    for i:ℕ(m):
-        p: ℝ = M[i, i]
-        B = for r:ℕ(m) → for c:ℕ(m) → (1.0 - E[i, r]) * (B[r, c] - M[r, i] * B[i, c] / p) + E[i, r] * (B[i, c] / p)
-        M = for r:ℕ(m) → for c:ℕ(m) → (1.0 - E[i, r]) * (M[r, c] - M[r, i] * M[i, c] / p) + E[i, r] * (M[i, c] / p)
-    return B
+def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
+    J: ℝ[n,n] = zeros2d(32, 32)
+    for c:ℕ(32):
+        for r:ℕ(32):
+            J[r, c] = W[r, c] * tanh_prime[0, c]
+    return J
+
+def linsolve(A: ℝ[32, 32], b: ℝ[32]): ℝ[32]:
+    aug: ℝ[32, 33] = zeros2d(32, 33)
+    for i:ℕ(32):
+        for c:ℕ(32):
+            aug[i, c] = A[i, c]
+        aug[i, 32] = b[i]
+    for i:ℕ(32):
+        piv = zeros1d(33)
+        for c:ℕ(33):
+            piv[c] = aug[i, c]
+        aug_next = zeros2d(32, 33)
+        for r:ℕ(32):
+            if r == i:
+                for c:ℕ(33):
+                    aug_next[r, c] = piv[c] / piv[i]
+            else:
+                fac = aug[r, i] / piv[i]
+                for c:ℕ(33):
+                    aug_next[r, c] = aug[r, c] - fac * piv[c]
+        aug = aug_next
+    x: ℝ[32] = zeros1d(32)
+    for i:ℕ(32):
+        idx = 31 - i
+        total = aug[idx, 32]
+        for j:ℕ(idx + 1, 32):
+            total = total - aug[idx, j] * x[j]
+        x_next = zeros1d(32)
+        for c:ℕ(32):
+            if c == idx:
+                x_next[c] = total / aug[idx, idx]
+            else:
+                x_next[c] = x[c]
+        x = x_next
+    return x
 
 class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
     h_star: ℝ[1,n]
     def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
         return tanh(h @ W + x @ U + b)
     def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
-        this.h_star = zero_array(1, 32)
-        fx: ℝ[1,n] = this.f(this.h_star, x)
-        dd: ℝ[1,n] = 1.0 - fx * fx 
-        J: ℝ[n,n] = zero_array(32, 32)
-        for i:ℕ(2):
-            J[:, i] = W[:, i] * dd[0, i] 
-        Jinv: ℝ[n,n] = inv(J - eye(32), 32)
-        for k:ℕ(2):
+        num_solver_steps: ℕ = 3
+        this.h_star = zeros2d(1, 32)
+        f_h: ℝ[1,n] = this.f(this.h_star, x)
+        tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
+        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(32)
+        for k:ℕ(num_solver_steps):
             g = this.f(this.h_star, x) - this.h_star
-            this.h_star = this.h_star - g @ Jinv
+            delta = linsolve(J, g[0])
+            this.h_star = this.h_star - [delta]
         return this.h_star
     def λ(x: ℝ[1,d]) → ℝ[1,d]:
         h_star: ℝ[1,n] = this.equilibrium(x)
@@ -73,9 +107,9 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
 print(DEVICE)
 W: ℝ[32,32] = rand_array(32, 32, 0.01)
 U: ℝ[784,32] = rand_array(784, 32, 0.02)
-b: ℝ[1,32] = zero_array(1, 32)
+b: ℝ[1,32] = zeros2d(1, 32)
 Wo: ℝ[32,784] = rand_array(32, 784, 0.05)
-bo: ℝ[1,784] = zero_array(1, 784)
+bo: ℝ[1,784] = zeros2d(1, 784)
 deq = DEQ(W, U, b, Wo, bo)
 
 images: ℝ = 10
