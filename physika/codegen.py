@@ -229,8 +229,8 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
         resolved_bodies = kept
 
     resolved_methods = {}
-    # dependent type binders are added expecilty as solved during CIC
-    # elbaortion to the fucntion call
+    # dependent type binders are added explictly as solved during CIC
+    # elaborationn to the function call
     if resolved_program:
         _dep = set(resolved_bodies or {})
         resolved_program = {

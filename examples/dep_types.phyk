@@ -13,7 +13,7 @@ e : ℝ = 3.0
 dot(v3, w3)
 
 # Example #2
-# Append function whose return type shape is adding 1 to original array's lenght
+# Append function whose return type shape is adding 1 to original array's length
 # Equivalent to, but CIC elaborated and verified:
 # len(u) + 1
 def append(u : ℝ[n], v : ℝ): ℝ[n+1]:
@@ -25,7 +25,7 @@ append(append(v3, e), e)
 
 
 # Example #3
-# Return `v` array lenght without calling a helper function. `v` length is available
+# Return `v` array length without calling a helper function. `v` length is available
 # at runtime.
 def f(n: ℝ, v: ℝ[m]): ℕ:
     return m
@@ -34,7 +34,7 @@ a: ℝ = 5.0
 f(a, v3)
 
 # Example #4
-# Use array's lenght to loop over and perform a multipplication.
+# Use array's length to loop over and perform a multiplication.
 def outer3(u: ℝ[m], v: ℝ[n], w: ℝ[p]): ℝ[m, n, p]:
     return for i : ℕ(m) → for j : ℕ(n) → for k : ℕ(p) → u[i] * v[j] * w[k]
 
@@ -42,7 +42,7 @@ outer3(v3, [1.0, 0.0], [1.0, 2.0, 3.0])
 
 
 # Example #5
-# Append fucntion variation for higher diemnison. In this case append a row to a matrix.
+# Append function variation for higher diemnison. In this case append a row to a matrix.
 def append_row(x: ℝ[m, n], row: ℝ[n]): ℝ[m+1, n]:
     return x + [row]
 
