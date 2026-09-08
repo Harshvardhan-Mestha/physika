@@ -12,7 +12,7 @@ def tanh(a):
     return (num / denom)
 
 def rand_array(n, m, μ):
-    return torch.stack([torch.stack([(μ * torch.distributions.Normal(0.0, 1.0).rsample().to(DEVICE)) for _fi_j in range(int(m)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    return torch.stack([torch.stack([(μ * torch.distributions.Normal(0.0, 1.0).rsample()) for _fi_j in range(int(m)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 
 def zeros2d(n, m):
     return torch.stack([torch.stack([(j * 0.0) for _fi_j in range(int(m)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
@@ -93,7 +93,7 @@ class DEQ(nn.Module):
         self.h_star = zeros2d(1, 32)
         f_h = self.f(self.h_star, x)
         tanh_prime = (1.0 - (f_h * f_h))
-        J = (df_dh(W, tanh_prime) - eye(32))
+        J = (df_dh(self.W, tanh_prime) - eye(32))
         for k in range(int(0), int(num_solver_steps)):
             g = (self.f(self.h_star, x) - self.h_star)
             delta = linsolve(J, g[int(0)])
@@ -103,7 +103,7 @@ class DEQ(nn.Module):
     def forward(self, x):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
-        h_star = self.equilibrium(x)
+        self.h_star = self.equilibrium(x)
         return ((self.h_star @ self.Wo) + self.bo)
 
     def loss(self, target, x_hat):
@@ -164,14 +164,14 @@ U = rand_array(784, 32, 0.02)
 b = zeros2d(1, 32)
 Wo = rand_array(32, 784, 0.05)
 bo = zeros2d(1, 784)
-deq = DEQ(W, U, b, Wo, bo)
+deq = DEQ(W, U, b, Wo, bo).to(DEVICE)
 images = 10
 X = rand_array(10, 784, 1.0)
 x0 = torch.stack([torch.as_tensor(X[int(0)])])
 recon_before = deq(x0)
 loss_before = deq.loss(x0, recon_before)
 print(print(loss_before))
-epochs = 10
+epochs = 1
 lr = 0.0001
 print(deq.train(X, epochs, lr, images))
 recon_after = deq(x0)
