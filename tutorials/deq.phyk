@@ -109,7 +109,7 @@ U: ℝ[784,32] = rand_array(784, 32, 0.02)
 b: ℝ[1,32] = zeros2d(1, 32)
 Wo: ℝ[32,784] = rand_array(32, 784, 0.05)
 bo: ℝ[1,784] = zeros2d(1, 784)
-deq = DEQ(W, U, b, Wo, bo)
+deq: DEQ = DEQ(W, U, b, Wo, bo)
 
 images: ℝ = 10
 # X: ℝ[10, 784] = load_mnist(images)      
@@ -120,7 +120,7 @@ recon_before: ℝ[1,784] = deq(x0)
 loss_before: ℝ = deq.loss(x0, recon_before)
 print(loss_before)
 
-epochs: ℕ = 10
+epochs: ℕ = 1
 lr: ℝ = 0.0001
 deq.train(X, epochs, lr, images)
 recon_after: ℝ[1,784] = deq(x0)
