@@ -39,8 +39,10 @@ def sq_vec(x):
 def cos_freqs(x):
     return torch.stack([torch.cos((x * (i + 1)) if isinstance((x * (i + 1)), torch.Tensor) else torch.tensor(float((x * (i + 1))))) for _fi_i in range(int(4)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 
-def elementwise_sq(x):
-    return torch.stack([(x[int(i)] ** 2) for _fi_i in range(int(len(x))) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+def elementwise_sq(x, n=None):
+    if n is None:
+        n = int(x.shape[0])
+    return torch.stack([torch.as_tensor((x[int(i)] ** 2)) for i in range(int(n))]).float()
 
 # === Program ===
 s0 = torch.tensor(2.0, requires_grad=True)

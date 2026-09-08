@@ -7,7 +7,9 @@ from physika.runtime import print
 from physika.runtime import compute_grad
 
 # === Functions ===
-def single_arg_jacobian(x):
+def single_arg_jacobian(x, m=None):
+    if m is None:
+        m = int(x.shape[0])
     a = x[int(0)]
     b = x[int(1)]
     return torch.stack([torch.as_tensor((a * b)), torch.as_tensor((a + b))])
@@ -23,7 +25,13 @@ def double_arg_jacobians(state, theta):
     dy = (((δ * x) * y) - (γ * y))
     return torch.stack([torch.as_tensor(dx), torch.as_tensor(dy)])
 
-def three_arg_jacobians(a, b, c):
+def three_arg_jacobians(a, b, c, m=None, n=None, o=None):
+    if m is None:
+        m = int(a.shape[0])
+    if n is None:
+        n = int(b.shape[0])
+    if o is None:
+        o = int(c.shape[0])
     x1 = a[int(0)]
     x2 = b[int(0)]
     x3 = c[int(0)]
