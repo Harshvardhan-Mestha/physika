@@ -118,5 +118,5 @@ def lu_decomposition(A, b):
 
 # === Program ===
 A = torch.tensor([[(-1), 0, 3], [2, 1, 3], [1, 1, 2]], device=DEVICE)
-b = torch.stack([torch.as_tensor(1), torch.as_tensor(2), torch.as_tensor(3)])
+b = torch.tensor([1, 2, 3], device=DEVICE)
 print(lu_decomposition(A, b))
