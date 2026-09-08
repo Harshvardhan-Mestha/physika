@@ -10,6 +10,8 @@ from pathlib import Path
 import subprocess
 import os
 import pytest
+from physika.core.elab.elab import Elab
+from physika.core.inductive import mk_builtin_env
 
 HEADER = "import torch\nimport torch.nn as nn\nimport torch.optim as optim\n"
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
@@ -75,9 +77,22 @@ def test_codegen_matches_reference(phyk_file):
     python file in torch_code dir
     """
     src = phyk_file.read_text()
-    code_phyk = from_ast_to_torch(parse_source_to_ast(src,
-                                                      phyk_file.resolve()),
-                                  print_code=False)
+    unified_ast = parse_source_to_ast(
+        src,
+        phyk_file.resolve(),
+    )
+    cic_elab = Elab(mk_builtin_env())
+    cic_result = cic_elab.elaborate(unified_ast)
+    code_phyk = from_ast_to_torch(
+        unified_ast,
+        print_code=False,
+        resolved_bodies=cic_result.get("resolved_bodies"),
+        resolved_methods=cic_result.get("resolved_methods"),
+        resolved_program=cic_result.get("resolved_program"),
+        resolved_program_fvar_names=cic_result.get(
+            "resolved_program_fvar_names"),
+        cic_env=cic_elab.state.env,
+    )
     code_torch = (TORCH_CODE_DIR / f"{phyk_file.stem}.py").read_text()
 
     assert HEADER in code_phyk

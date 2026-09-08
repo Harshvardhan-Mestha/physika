@@ -72,6 +72,11 @@ Tensors (contravariant / covariant)
 .. literalinclude:: ../examples/example_tensors.phyk
    :language: text
 
+Dependent types
+~~~~~~~~~~~~~~~~
+.. literalinclude:: ../examples/dep_types.phyk
+   :language: text
+
 Lists
 ~~~~~
 

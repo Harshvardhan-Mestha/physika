@@ -9,6 +9,10 @@ from physika.utils.ast_utils import (ast_uses_solve, ast_uses_func,
 from physika.features.classes import generate_class
 from physika.elf import REGISTRY
 
+# fallback to ast codegen
+AST_CODEGEN_STMT_TAGS = ("body_for", "body_for_range", "body_for_accum",
+                         "body_if_else", "body_if_else_return")
+
 
 def from_ast_to_torch(unified_ast: Dict[str, Any],
                       print_code: bool = True,
@@ -212,10 +216,27 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
     # fall back to raw-AST codegen for functions instead that have statement
     # reassignemnts in their bodies
     if resolved_bodies:
-        resolved_bodies = {
-            name: term
-            for name, term in resolved_bodies.items() if
-            not body_mutates_in_place(unified_ast["functions"].get(name, {}))
+        kept: Dict[str, Any] = {}
+        for name, term in resolved_bodies.items():
+            func_def = unified_ast["functions"].get(name, {})
+            param_order = term[3]
+            dependent = len(param_order) > len(func_def.get("params", []))
+            ast_only = body_mutates_in_place(func_def) or any(
+                isinstance(s, tuple) and s and s[0] in AST_CODEGEN_STMT_TAGS
+                for s in func_def.get("statements", []))
+            if dependent and not ast_only:
+                kept[name] = term
+        resolved_bodies = kept
+
+    resolved_methods = {}
+    # dependent type binders are added explictly as solved during CIC
+    # elaborationn to the function call
+    if resolved_program:
+        _dep = set(resolved_bodies or {})
+        resolved_program = {
+            i: entry
+            for i, entry in resolved_program.items() if any(
+                ast_uses_func(unified_ast["program"][i], d) for d in _dep)
         }
 
     # merge solved cic terms duting elaboration for names lookup

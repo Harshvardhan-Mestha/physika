@@ -30,7 +30,11 @@ def get_2d_array_num_rows(x):
         total = total + 1
     return total
 
-def get_2d_array_num_cols(x):
+def get_2d_array_num_cols(x, m=None, n=None):
+    if m is None:
+        m = int(x.shape[0])
+    if n is None:
+        n = int(x.shape[1])
     return get_1d_array_length(x[int(0)])
 
 def arange(n):
