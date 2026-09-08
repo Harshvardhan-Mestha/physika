@@ -37,38 +37,38 @@ The UndirectedGraph class
 
 .. code-block:: text
 
-   class UndirectedGraph():
-       adjacency: ℝ[n, n]
-       def num_vertices() → ℝ:
-           return len(this.adjacency) * 1.0
-       def has_edge(u: ℝ, v: ℝ) → ℝ:
-           m: ℝ[n, n] = this.adjacency
-           r: ℝ[n] = m[u]
-           return r[v]
-       def degree(u: ℝ) → ℝ:
-           m: ℝ[n, n] = this.adjacency
-           r: ℝ[n] = m[u]
-           return sum(r)
-       def neighbors(u: ℝ) → ℝ[n]:
-           m: ℝ[n, n] = this.adjacency
-           return m[u]
-       def add_edge(u: ℝ, v: ℝ):
-           m: ℝ[n, n] = this.adjacency
-           k: ℕ = len(m)
-           new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
-           new_adj[u, v] = 1.0
-           new_adj[v, u] = 1.0
-           this.adjacency = new_adj
-       def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
-           old: ℝ[n, n] = this.adjacency
-           result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
-           m: ℕ = len(old)
-           for a : ℕ(m):
-               for b : ℕ(m):
-                   result[a, b] = old[a, b]
-           return result
-       def add_vertex(new_n: ℕ):
-           this.adjacency = this.grow_adjacency(new_n)
+    class UndirectedGraph():
+        adjacency: ℝ[n, n]
+        def num_vertices() → ℝ:
+            return get_2d_array_num_rows(this.adjacency) * 1.0
+        def has_edge(u: ℝ, v: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            r: ℝ[n] = m[u]
+            return r[v]
+        def degree(u: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            r: ℝ[n] = m[u]
+            return get_sum_of_1d_array(r)
+        def neighbors(u: ℝ) → ℝ[n]:
+            m: ℝ[n, n] = this.adjacency
+            return m[u]
+        def add_edge(u: ℝ, v: ℝ):
+            m: ℝ[n, n] = this.adjacency
+            k: ℝ= get_2d_array_num_rows(m)
+            new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
+            new_adj[u, v] = 1.0
+            new_adj[v, u] = 1.0
+            this.adjacency = new_adj
+        def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
+            old: ℝ[n, n] = this.adjacency
+            result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
+            m: ℝ= get_2d_array_num_rows(old)
+            for a : ℕ(m):
+                for b : ℕ(m):
+                    result[a, b] = old[a, b]
+            return result
+        def add_vertex(new_n: ℕ):
+            this.adjacency = this.grow_adjacency(new_n)
 
 ``add_edge`` copies the matrix and flips two entries, so its return type
 ``ℝ[n, n]`` is unchanged. ``add_vertex`` cannot do the same: it needs a
@@ -87,6 +87,25 @@ A ``Graph`` is built through a function rather than a literal matrix:
        g: UndirectedGraph = UndirectedGraph()
        g.adjacency = z
        return g
+
+Helper Functions
+----------------
+
+.. code-block:: text
+
+    def get_sum_of_1d_array(x: ℝ[m]): ℝ:
+        total: ℝ = 0
+        for i:
+            total += x[i]
+        return total
+
+    def get_2d_array_num_rows(x: R[m, n]): ℝ:
+        total: ℝ = 0
+        temp: ℝ = 0
+        for i:
+            temp = x[i]
+            total += 1
+        return total
 
 Example
 -------
