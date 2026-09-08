@@ -482,7 +482,7 @@ Full Code
     b: ℝ[1,32] = zeros2d(1, 32)
     Wo: ℝ[32,784] = rand_array(32, 784, 0.05)
     bo: ℝ[1,784] = zeros2d(1, 784)
-    deq = DEQ(W, U, b, Wo, bo)
+    deq: DEQ = DEQ(W, U, b, Wo, bo)
 
     images: ℝ = 10
     X: ℝ[10, 784] = load_mnist(images)
