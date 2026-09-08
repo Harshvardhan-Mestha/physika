@@ -6,6 +6,7 @@ familiar from a dict-of-adjacency-lists implementation, in Physika.
 
 .. figure:: ../_static/tutorial_files/undirected_graph.webp
    :align: center
+   :width: 50%
    :alt: A graph with six vertices and seven edges
 
    Figure 1: A graph with six vertices and seven edges [AzaTothGraph]_
@@ -107,6 +108,36 @@ Helper Functions
             total += 1
         return total
 
+Function summary
+----------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Function
+     - Description
+   * - ``num_vertices()``
+     - Returns the number of vertices, read off as the row count of the adjacency matrix.
+   * - ``has_edge(u, v)``
+     - Returns ``1.0`` if an edge connects ``u`` and ``v``, otherwise ``0.0``.
+   * - ``degree(u)``
+     - Returns the degree of ``u`` by summing its row of the adjacency matrix.
+   * - ``neighbors(u)``
+     - Returns row ``u`` of the adjacency matrix, the indicator vector of ``u``'s neighbors.
+   * - ``add_edge(u, v)``
+     - Copies the matrix, sets entries ``[u, v]`` and ``[v, u]`` to ``1.0``, and stores the new matrix.
+   * - ``grow_adjacency(new_n)``
+     - Returns an ``new_n`` × ``new_n`` matrix with the old adjacency copied into the top-left block and the rest left zero.
+   * - ``add_vertex(new_n)``
+     - Replaces the adjacency with ``grow_adjacency(new_n)``, adding an isolated vertex.
+   * - ``empty_graph(n_vertices)``
+     - Builds an ``UndirectedGraph`` with ``n_vertices`` vertices and no edges.
+   * - ``get_sum_of_1d_array(x)``
+     - Returns the sum of the elements of a 1-D array.
+   * - ``get_2d_array_num_rows(x)``
+     - Returns the number of rows of a 2-D array.
+
 Example
 -------
 
@@ -141,6 +172,58 @@ Vertex ``1`` connects to both ``0`` and ``2``, so its degree is ``2``;
 has 4 vertices, and connecting the new vertex ``3`` to vertex ``2`` gives it
 degree ``1``.
 
+.. note::
+    To visualize the graph, you can use `visualize_graph` function, add it in `runtime.py`
+
+    .. code-block:: python
+
+        def visualize_graph(adjacency):
+            import sys
+            n = len(adjacency)
+            sys.stdout.write("Graph\n")
+            sys.stdout.write("-----\n")
+            for u in range(n):
+                sys.stdout.write(f"{u}:\n")
+                for v in range(n):
+                    if adjacency[u][v] == 1:
+                        sys.stdout.write(f"  -> {v}\n")
+                sys.stdout.write("\n")
+
+    Usage:
+
+    .. code-block:: text
+
+        n0: ℕ = 3
+        g = empty_graph(n0)
+
+        g.add_edge(0.0, 1.0)
+        g.add_edge(1.0, 2.0)
+
+        n3: ℕ = 4
+        g.add_vertex(n3)
+        g.add_edge(2.0, 3.0)
+
+        visualize_graph(g.adjacency)
+
+    Output:
+
+    .. code-block:: text
+
+        Graph
+        -----
+        0:
+          -> 1
+
+        1:
+          -> 0
+          -> 2
+
+        2:
+          -> 1
+          -> 3
+
+        3:
+          -> 2
 
 References
 ----------
