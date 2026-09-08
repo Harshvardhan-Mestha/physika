@@ -225,6 +225,80 @@ degree ``1``.
         3:
           -> 2
 
+Full Code
+---------
+
+.. code-block:: text
+
+    def get_sum_of_1d_array(x: ℝ[m]): ℝ:
+        total: ℝ = 0
+        for i:
+            total += x[i]
+        return total
+
+    def get_2d_array_num_rows(x: R[m, n]): ℝ:
+        total: ℝ = 0
+        temp: ℝ = 0
+        for i:
+            temp = x[i]
+            total += 1
+        return total
+
+    class UndirectedGraph():
+        adjacency: ℝ[n, n]
+        def num_vertices() → ℝ:
+            return get_2d_array_num_rows(this.adjacency) * 1.0
+        def has_edge(u: ℝ, v: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            r: ℝ[n] = m[u]
+            return r[v]
+        def degree(u: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            r: ℝ[n] = m[u]
+            return get_sum_of_1d_array(r)
+        def neighbors(u: ℝ) → ℝ[n]:
+            m: ℝ[n, n] = this.adjacency
+            return m[u]
+        def add_edge(u: ℝ, v: ℝ):
+            m: ℝ[n, n] = this.adjacency
+            k: R = get_2d_array_num_rows(m)
+            new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
+            new_adj[u, v] = 1.0
+            new_adj[v, u] = 1.0
+            this.adjacency = new_adj
+        def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
+            old: ℝ[n, n] = this.adjacency
+            result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
+            m: R = get_2d_array_num_rows(old)
+            for a : ℕ(m):
+                for b : ℕ(m):
+                    result[a, b] = old[a, b]
+            return result
+        def add_vertex(new_n: ℕ):
+            this.adjacency = this.grow_adjacency(new_n)
+
+    def empty_graph(n_vertices: ℕ): UndirectedGraph:
+        z: ℝ[n_vertices, n_vertices] = for a : ℕ(n_vertices) → for b : ℕ(n_vertices) → (a + b) * 0.0
+        g: UndirectedGraph = UndirectedGraph()
+        g.adjacency = z
+        return g
+
+    n0: ℕ = 3
+    g: UndirectedGraph = empty_graph(n0)
+    g.num_vertices()
+
+    g.add_edge(0.0, 1.0)
+    g.add_edge(1.0, 2.0)
+
+    g.neighbors(1.0)
+    g.degree(1.0)
+    g.has_edge(0.0, 2.0)
+
+    n3: ℕ = 4
+    g.add_vertex(n3)
+    g.add_edge(2.0, 3.0)
+    g.degree(3.0)
+
 References
 ----------
 
