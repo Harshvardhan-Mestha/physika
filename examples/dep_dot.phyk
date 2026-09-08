@@ -1,0 +1,52 @@
+# Examples of computing with dependent types
+
+# Example #1
+# Using u array's length (n) to loop over without using a `len()` or similar function
+def dot(u : ℝ[n], v : ℝ[n]): ℝ:
+    return sum(for i : ℕ(n) → u[i] * v[i])
+
+
+v3 : ℝ[3] = [1.0, 2.0, 3.0]
+w3 : ℝ[3] = [4.0, 5.0, 6.0]
+e : ℝ = 3.0
+
+dot(v3, w3)
+
+# Example #2
+# Append function whose return type shape is adding 1 to original array's lenght
+# Equivalent to, but CIC elaborated and verified:
+# len(u) + 1
+def append(u : ℝ[n], v : ℝ): ℝ[n+1]:
+    return u + [v]
+
+append(v3, e)
+# apply function to a new size array
+append(append(v3, e), e)
+
+
+# Example #3
+# Return `v` array lenght without calling a helper function. `v` length is available
+# at runtime.
+def f(n: ℝ, v: ℝ[m]): ℕ:
+    return m
+
+a: ℝ = 5.0
+f(a, v3)
+
+# Example #4
+# Use array's lenght to loop over and perform a multipplication.
+def outer3(u: ℝ[m], v: ℝ[n], w: ℝ[p]): ℝ[m, n, p]:
+    return for i : ℕ(m) → for j : ℕ(n) → for k : ℕ(p) → u[i] * v[j] * w[k]
+
+outer3(v3, [1.0, 0.0], [1.0, 2.0, 3.0])
+
+
+# Example #5
+# Append fucntion variation for higher diemnison. In this case append a row to a matrix.
+def append_row(x: ℝ[m, n], row: ℝ[n]): ℝ[m+1, n]:
+    return x + [row]
+
+x2mat: ℝ[3, 2] = [[3.0, 2.0], [1.0, 2.0], [1.0, 2.0]]
+new_row: ℝ[2] = [1.0, 5.0]
+
+append_row(x2mat, new_row)

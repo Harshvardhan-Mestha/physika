@@ -11,7 +11,7 @@ from physika.elf import REGISTRY
 
 # fallback to ast codegen
 AST_CODEGEN_STMT_TAGS = ("body_for", "body_for_range", "body_for_accum",
-                          "body_if_else", "body_if_else_return")
+                         "body_if_else", "body_if_else_return")
 
 
 def from_ast_to_torch(unified_ast: Dict[str, Any],
@@ -216,20 +216,28 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
     # fall back to raw-AST codegen for functions instead that have statement
     # reassignemnts in their bodies
     if resolved_bodies:
-        kept = {}
+        kept: Dict[str, Any] = {}
         for name, term in resolved_bodies.items():
             func_def = unified_ast["functions"].get(name, {})
             param_order = term[3]
             dependent = len(param_order) > len(func_def.get("params", []))
-            # CIC term to torch lower is used for computing with dependent types at funciton level
             ast_only = body_mutates_in_place(func_def) or any(
                 isinstance(s, tuple) and s and s[0] in AST_CODEGEN_STMT_TAGS
                 for s in func_def.get("statements", []))
             if dependent and not ast_only:
                 kept[name] = term
         resolved_bodies = kept
-    resolved_methods = None
-    resolved_program = None
+
+    resolved_methods = {}
+    # dependent type binders are added expecilty as solved during CIC
+    # elbaortion to the fucntion call
+    if resolved_program:
+        _dep = set(resolved_bodies or {})
+        resolved_program = {
+            i: entry
+            for i, entry in resolved_program.items() if any(
+                ast_uses_func(unified_ast["program"][i], d) for d in _dep)
+        }
 
     # merge solved cic terms duting elaboration for names lookup
     resolved_names = set(resolved_bodies or {}) | set(resolved_methods or {})
