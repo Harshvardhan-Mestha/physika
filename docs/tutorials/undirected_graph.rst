@@ -194,7 +194,7 @@ degree ``1``.
     .. code-block:: text
 
         n0: ℕ = 3
-        g = empty_graph(n0)
+        g: UndirectedGraph = empty_graph(n0)
 
         g.add_edge(0.0, 1.0)
         g.add_edge(1.0, 2.0)

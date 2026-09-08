@@ -52,7 +52,7 @@ def empty_graph(n_vertices: ℕ): UndirectedGraph:
     return g
 
 n0: ℕ = 3
-g = empty_graph(n0)
+g: UndirectedGraph = empty_graph(n0)
 g.num_vertices()
 
 g.add_edge(0.0, 1.0)
