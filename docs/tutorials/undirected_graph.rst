@@ -27,11 +27,16 @@ Physika has no ``dict`` and no growable container, and its values are
 immutable, so the design differs from the Python in three ways:
 
 - The adjacency structure is a fixed-size matrix, ``adjacency: ℝ[n, n]``,
-  with a ``1.0`` at ``[u, v]`` wherever an edge connects ``u`` and ``v``;
+  holding the edge weight at ``[u, v]`` wherever an edge connects ``u`` and
+  ``v`` (``1.0`` for a plain unweighted edge);
 - A method that would mutate the graph instead returns a **new** ``Graph``;
 - Adding a vertex changes the matrix shape, which a method cannot do to its
   own ``this`` in place, so the new vertex count is passed in explicitly as
   a ``ℕ`` parameter.
+
+Because the adjacency entries are real numbers, any readout built from them
+with ``+``, ``*`` and ``sum`` is **differentiable** in the edge weights --
+see :ref:`undirected-graph-differentiability` below.
 
 The UndirectedGraph class
 -------------------------
@@ -50,16 +55,28 @@ The UndirectedGraph class
             m: ℝ[n, n] = this.adjacency
             r: ℝ[n] = m[u]
             return get_sum_of_1d_array(r)
+        def sq_degree_sum(s: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            k: ℝ = get_2d_array_num_rows(m)
+            acc: ℝ = 0
+            for i : ℕ(k):
+                d: ℝ = 0
+                for j : ℕ(k):
+                    d += s * m[i, j]
+                acc += d * d
+            return acc
         def neighbors(u: ℝ) → ℝ[n]:
             m: ℝ[n, n] = this.adjacency
             return m[u]
-        def add_edge(u: ℝ, v: ℝ):
+        def add_weighted_edge(u: ℝ, v: ℝ, w: ℝ):
             m: ℝ[n, n] = this.adjacency
-            k: ℝ= get_2d_array_num_rows(m)
+            k: ℝ = get_2d_array_num_rows(m)
             new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
-            new_adj[u, v] = 1.0
-            new_adj[v, u] = 1.0
+            new_adj[u, v] = w
+            new_adj[v, u] = w
             this.adjacency = new_adj
+        def add_edge(u: ℝ, v: ℝ):
+            this.add_weighted_edge(u, v, 1.0)
         def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
             old: ℝ[n, n] = this.adjacency
             result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
@@ -71,15 +88,48 @@ The UndirectedGraph class
         def add_vertex(new_n: ℕ):
             this.adjacency = this.grow_adjacency(new_n)
 
-``add_edge`` copies the matrix and flips two entries, so its return type
-``ℝ[n, n]`` is unchanged. ``add_vertex`` cannot do the same: it needs a
+``add_weighted_edge`` copies the matrix and sets two entries to the weight
+``w``, so its shape ``ℝ[n, n]`` is unchanged. ``w`` can be a similarity in a
+nearest-neighbour graph, a capacity or distance in a transport network, a
+contact rate in an epidemic model, or an attention coefficient in a GNN.
+``add_edge(u, v)`` is a shortcut for the unweighted case
+``add_weighted_edge(u, v, 1.0)``.
+
+``add_vertex`` cannot copy-and-edit in place: it needs a
 bigger matrix, so it calls ``grow_adjacency``, whose ``new_n`` is bound as
 its own ``ℕ`` parameter and reused in the return type ``ℝ[new_n, new_n]`` --
 the only way Physika lets a method's output shape differ from ``this``'s.
 The old matrix is copied into the top-left block; the new row and column
 are left zero, i.e. the new vertex starts isolated.
 
-A ``Graph`` is built through a function rather than a literal matrix:
+``sq_degree_sum(s)`` sums the squared weighted degree of every vertex:
+
+.. math::
+
+   \texttt{sq\_degree\_sum}(s)
+     = \sum_{i} \bigl(s \cdot \deg(i)\bigr)^{2}
+     = s^{2} \sum_{i} \deg(i)^{2}.
+
+At :math:`s = 1` this is the **sum of squared degrees**
+:math:`\sum_i \deg(i)^2`. Divided by the vertex count it is the raw second
+moment of the degree distribution, :math:`\langle k^{2} \rangle`; it is also
+the *first Zagreb index* :math:`M_1(G)` of chemical graph theory and the
+squared Euclidean norm :math:`\lVert \mathbf{d} \rVert_2^{2}` of the degree
+vector :math:`\mathbf{d}`. It is one of the most reused scalars in network
+science:
+
+- the epidemic threshold of a spreading process is
+  :math:`\langle k \rangle / \langle k^{2} \rangle` -- a network with larger
+  :math:`\langle k^{2} \rangle` (a few high-degree hubs) is far more
+  vulnerable at the same average degree;
+- a giant connected component exists iff
+  :math:`\langle k^{2} \rangle - 2\langle k \rangle > 0` (Molloy--Reed), the
+  basis of percolation and node-failure robustness analysis;
+- :math:`\operatorname{Var}(k) = \langle k^{2} \rangle - \langle k \rangle^{2}`
+  measures degree heterogeneity, separating a regular mesh from a
+  hub-dominated network.
+
+The ``UndirectedGraph`` is built through a function rather than a literal matrix:
 
 .. code-block:: text
 
@@ -122,11 +172,15 @@ Function summary
    * - ``has_edge(u, v)``
      - Returns ``1.0`` if an edge connects ``u`` and ``v``, otherwise ``0.0``.
    * - ``degree(u)``
-     - Returns the degree of ``u`` by summing its row of the adjacency matrix.
+     - Returns the degree of ``u`` by summing its row of the adjacency matrix (the weighted degree when edges carry weights).
+   * - ``sq_degree_sum(s)``
+     - Returns :math:`\sum_i (s\,\deg(i))^2`. Scaled sum of squared degrees. 
    * - ``neighbors(u)``
      - Returns row ``u`` of the adjacency matrix, the indicator vector of ``u``'s neighbors.
+   * - ``add_weighted_edge(u, v, w)``
+     - Copies the matrix, sets entries ``[u, v]`` and ``[v, u]`` to ``w``, and stores the new matrix.
    * - ``add_edge(u, v)``
-     - Copies the matrix, sets entries ``[u, v]`` and ``[v, u]`` to ``1.0``, and stores the new matrix.
+     - Adds an unweighted edge; calls ``add_weighted_edge(u, v, 1.0)``.
    * - ``grow_adjacency(new_n)``
      - Returns an ``new_n`` × ``new_n`` matrix with the old adjacency copied into the top-left block and the rest left zero.
    * - ``add_vertex(new_n)``
@@ -172,6 +226,69 @@ Vertex ``1`` connects to both ``0`` and ``2``, so its degree is ``2``;
 has 4 vertices, and connecting the new vertex ``3`` to vertex ``2`` gives it
 degree ``1``.
 
+.. _undirected-graph-differentiability:
+
+Differentiability
+-----------------
+
+Because the adjacency holds real weights, ``degree``, ``sq_degree_sum`` and
+``neighbors`` are ``sum`` / gather over that matrix and therefore smooth in
+the weights. Physika lowers the program to PyTorch, so ``grad`` gives the
+derivative of any such readout through ``torch.autograd``.
+
+The derivative of a structural metric with respect to edge weights drives
+several standard workflows:
+
+- **Network design and intervention.** Given a budget, adjust the edge
+  weights by gradient descent to reach a target -- raise a transport
+  network's throughput, drive the epidemic threshold
+  :math:`\langle k \rangle / \langle k^{2} \rangle` above the current
+  transmissibility, meet a degree-variance goal. The gradient ranks which
+  edges to strengthen or cut.
+- **Sensitivity analysis.** "If this contact rate were 5 % higher, how much
+  does the spreading risk move?" is the partial derivative of the metric
+  with respect to that weight.
+- **Graph-structure learning and GNNs.** When the weights are themselves
+  learned (attention, a learned similarity graph), training is gradient
+  descent on a loss whose graph-level terms are metrics like this one.
+
+.. code-block:: text
+
+   wg: UndirectedGraph = empty_graph(3)
+   wg.add_weighted_edge(0.0, 1.0, 2.0)
+   wg.add_weighted_edge(1.0, 2.0, 3.0)
+
+   s0: ℝ = 1.0
+   wg.sq_degree_sum(s0)
+   grad(wg.sq_degree_sum(s0), s0)
+
+Output::
+
+   38.0 ∈ ℝ
+   76.0 ∈ ℝ
+
+The weighted degrees are :math:`\deg(0) = 2`, :math:`\deg(1) = 2 + 3 = 5`
+and :math:`\deg(2) = 3`. As a function of the scale :math:`s`,
+
+.. math::
+
+   f(s) = \sum_i \bigl(s\,\deg(i)\bigr)^{2}
+        = s^{2}\,(2^{2} + 5^{2} + 3^{2})
+        = 38\,s^{2},
+
+so the first printed value is :math:`f(1) = 38`.
+
+The gradient is the derivative of that same sum. Differentiating term by
+term with the chain rule,
+
+.. math::
+
+   f'(s) = \sum_i \frac{\mathrm{d}}{\mathrm{d}s}\bigl(s\,\deg(i)\bigr)^{2}
+         = \sum_i 2\,\bigl(s\,\deg(i)\bigr)\,\deg(i)
+         = 2\,s \sum_i \deg(i)^{2}
+         = 2\,s \cdot 38
+         = 76\,s .
+
 .. note::
     To visualize the graph, you can use `visualize_graph` function, add it in `runtime.py`
 
@@ -185,7 +302,7 @@ degree ``1``.
             for u in range(n):
                 sys.stdout.write(f"{u}:\n")
                 for v in range(n):
-                    if adjacency[u][v] == 1:
+                    if adjacency[u][v] != 0:
                         sys.stdout.write(f"  -> {v}\n")
                 sys.stdout.write("\n")
 
@@ -256,16 +373,28 @@ Full Code
             m: ℝ[n, n] = this.adjacency
             r: ℝ[n] = m[u]
             return get_sum_of_1d_array(r)
+        def sq_degree_sum(s: ℝ) → ℝ:
+            m: ℝ[n, n] = this.adjacency
+            k: R = get_2d_array_num_rows(m)
+            acc: ℝ = 0
+            for i : ℕ(k):
+                d: ℝ = 0
+                for j : ℕ(k):
+                    d += s * m[i, j]
+                acc += d * d
+            return acc
         def neighbors(u: ℝ) → ℝ[n]:
             m: ℝ[n, n] = this.adjacency
             return m[u]
-        def add_edge(u: ℝ, v: ℝ):
+        def add_weighted_edge(u: ℝ, v: ℝ, w: ℝ):
             m: ℝ[n, n] = this.adjacency
             k: R = get_2d_array_num_rows(m)
             new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
-            new_adj[u, v] = 1.0
-            new_adj[v, u] = 1.0
+            new_adj[u, v] = w
+            new_adj[v, u] = w
             this.adjacency = new_adj
+        def add_edge(u: ℝ, v: ℝ):
+            this.add_weighted_edge(u, v, 1.0)
         def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
             old: ℝ[n, n] = this.adjacency
             result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
@@ -298,6 +427,15 @@ Full Code
     g.add_vertex(n3)
     g.add_edge(2.0, 3.0)
     g.degree(3.0)
+
+    # Differentiability: build a weighted graph and grad a readout w.r.t. s.
+    wg: UndirectedGraph = empty_graph(3)
+    wg.add_weighted_edge(0.0, 1.0, 2.0)
+    wg.add_weighted_edge(1.0, 2.0, 3.0)
+
+    s0: ℝ = 1.0
+    wg.sq_degree_sum(s0)
+    grad(wg.sq_degree_sum(s0), s0)
 
 References
 ----------

@@ -24,16 +24,28 @@ class UndirectedGraph():
         m: ℝ[n, n] = this.adjacency
         r: ℝ[n] = m[u]
         return get_sum_of_1d_array(r)
+    def sq_degree_sum(s: ℝ) → ℝ:
+        m: ℝ[n, n] = this.adjacency
+        k: R = get_2d_array_num_rows(m)
+        acc: ℝ = 0
+        for i : ℕ(k):
+            d: ℝ = 0
+            for j : ℕ(k):
+                d += s * m[i, j]
+            acc += d * d
+        return acc
     def neighbors(u: ℝ) → ℝ[n]:
         m: ℝ[n, n] = this.adjacency
         return m[u]
-    def add_edge(u: ℝ, v: ℝ):
+    def add_weighted_edge(u: ℝ, v: ℝ, w: ℝ):
         m: ℝ[n, n] = this.adjacency
         k: R = get_2d_array_num_rows(m)
         new_adj: ℝ[n, n] = for a : ℕ(k) → for b : ℕ(k) → m[a, b]
-        new_adj[u, v] = 1.0
-        new_adj[v, u] = 1.0
+        new_adj[u, v] = w
+        new_adj[v, u] = w
         this.adjacency = new_adj
+    def add_edge(u: ℝ, v: ℝ):
+        this.add_weighted_edge(u, v, 1.0)
     def grow_adjacency(new_n: ℕ) → ℝ[new_n, new_n]:
         old: ℝ[n, n] = this.adjacency
         result: ℝ[new_n, new_n] = for a : ℕ(new_n) → for b : ℕ(new_n) → (a + b) * 0.0
@@ -66,3 +78,11 @@ n3: ℕ = 4
 g.add_vertex(n3)
 g.add_edge(2.0, 3.0)
 g.degree(3.0)
+
+wg: UndirectedGraph = empty_graph(3)
+wg.add_weighted_edge(0.0, 1.0, 2.0)
+wg.add_weighted_edge(1.0, 2.0, 3.0)
+
+s0: ℝ = 1.0
+wg.sq_degree_sum(s0)
+grad(wg.sq_degree_sum(s0), s0)

@@ -4,6 +4,7 @@ import torch.optim as optim
 from physika.runtime import DEVICE
 
 from physika.runtime import print
+from physika.runtime import compute_grad
 
 # === Functions ===
 def get_sum_of_1d_array(x):
@@ -52,22 +53,42 @@ class UndirectedGraph(nn.Module):
         r = m[int(u)]
         return get_sum_of_1d_array(r)
 
+    def sq_degree_sum(self, s):
+        this = self
+        s = torch.as_tensor(s, device=DEVICE).float()
+        m = self.adjacency
+        k = get_2d_array_num_rows(m)
+        acc = 0
+        for i in range(int(0), int(k)):
+            d = 0
+            for j in range(int(0), int(k)):
+                d = d + (s * m[int(i), int(j)])
+            acc = acc + (d * d)
+        return acc
+
     def neighbors(self, u):
         this = self
         u = torch.as_tensor(u, device=DEVICE).float()
         m = self.adjacency
         return m[int(u)]
 
+    def add_weighted_edge(self, u, v, w):
+        this = self
+        u = torch.as_tensor(u, device=DEVICE).float()
+        v = torch.as_tensor(v, device=DEVICE).float()
+        w = torch.as_tensor(w, device=DEVICE).float()
+        m = self.adjacency
+        k = get_2d_array_num_rows(m)
+        new_adj = torch.stack([torch.stack([m[int(a), int(b)] for _fi_b in range(int(k)) for b in [torch.tensor(float(_fi_b), device=DEVICE)]]) for _fi_a in range(int(k)) for a in [torch.tensor(float(_fi_a), device=DEVICE)]])
+        new_adj[int(u), int(v)] = w
+        new_adj[int(v), int(u)] = w
+        self.adjacency = new_adj
+
     def add_edge(self, u, v):
         this = self
         u = torch.as_tensor(u, device=DEVICE).float()
         v = torch.as_tensor(v, device=DEVICE).float()
-        m = self.adjacency
-        k = get_2d_array_num_rows(m)
-        new_adj = torch.stack([torch.stack([m[int(a), int(b)] for _fi_b in range(int(k)) for b in [torch.tensor(float(_fi_b), device=DEVICE)]]) for _fi_a in range(int(k)) for a in [torch.tensor(float(_fi_a), device=DEVICE)]])
-        new_adj[int(u), int(v)] = 1.0
-        new_adj[int(v), int(u)] = 1.0
-        self.adjacency = new_adj
+        self.add_weighted_edge(u, v, 1.0)
 
     def grow_adjacency(self, new_n):
         this = self
@@ -106,3 +127,9 @@ n3 = 4
 print(g.add_vertex(n3))
 print(g.add_edge(2.0, 3.0))
 print(g.degree(3.0))
+wg = empty_graph(3)
+print(wg.add_weighted_edge(0.0, 1.0, 2.0))
+print(wg.add_weighted_edge(1.0, 2.0, 3.0))
+s0 = torch.tensor(1.0, requires_grad=True)
+print(wg.sq_degree_sum(s0))
+print(compute_grad(wg.sq_degree_sum(s0), s0))
