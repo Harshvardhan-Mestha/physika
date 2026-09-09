@@ -18,17 +18,27 @@ from physika.utils.cic_utils.expr_utils import get_app_fn_args
 from physika.utils.cic_utils.inductive_utils import (
     app_all,
     check_positivity_for_inductive,
+    cons_case_returning,
+    const_vec_motive,
     decl_is_prop_sorted,
     derive_recursor,
+    dim_vec_nth,
+    int_lit,
+    int_rec_app,
     mk_bool_decl,
+    mk_dim_vec_literal,
     mk_fin_decl,
     mk_int_decl,
     mk_nat_decl,
     mk_prod_decl,
     mk_vec_decl,
+    mk_vec_literal,
     name_appears,
     open_index_tele,
+    read_dim_vec_literal,
     reg_autodiff,
+    reg_dim_ops,
+    reg_int_ops,
     reg_mat_ops,
     reg_nat_ops,
     reg_ofnat,
@@ -36,12 +46,13 @@ from physika.utils.cic_utils.inductive_utils import (
     reg_vec_ops,
     self_reference_indices,
     strict_positive_check,
+    vec_rec_app,
     verify_recursor_rules,
 )
 from physika.core.environment import ConstantInfo, Environment, InductiveInfo
 from physika.core.level import LZero
 from physika.core.expr import NatLit, Lit
-from physika.core.reduction import lit_nat_int, whnf
+from physika.core.reduction import is_def_eq, lit_nat_int, whnf
 from physika.core.local_context import LocalContext
 from physika.core.metavar import MetaVarContext
 
@@ -317,6 +328,15 @@ def apply(fn, *xs):
     for x in xs:
         fn = App(fn, x)
     return fn
+
+
+def def_eq_builtin(a, b):
+    """
+    Helper testing fucntion for checking if two values are definitionally
+    equal in the same CIC environment.
+    """
+    return is_def_eq(a, b, mk_builtin_env(), LocalContext(),
+                     MetaVarContext())[0]
 
 
 def nat_info():
@@ -768,6 +788,288 @@ class TestNatValues:
             whnf_builtin(App(App(Const("Nat.sub", ()), Lit(2)), Lit(5)))) == 0
 
 
+class TestIntLit:
+    """
+    Tests for ``int_lit``.
+    """
+
+    def test_int_of_nat_neg_succ(self):
+        """``k >= 0`` encodes as ``Int.ofNat k`` and ``k < 0`` should be a
+        ``Int.negSucc (-k - 1)`` expression."""
+        assert int_lit(3) == App(Const("Int.ofNat", ()), Lit(3))
+        assert int_lit(0) == App(Const("Int.ofNat", ()), Lit(0))
+
+        # k <0
+        assert int_lit(-1) == App(Const("Int.negSucc", ()), Lit(0))
+        assert int_lit(-2) == App(Const("Int.negSucc", ()), Lit(1))
+
+
+class TestReadDimVecLiteral:
+    """
+    Tests for ``read_dim_vec_literal``.
+    """
+
+    def test_reads_a_literal_chain(self):
+        """
+        A ``Vec Int`` cons/nil chain should produce a correct ``list[int]``.
+        """
+        v = mk_vec_literal(Const("Int", ()), [int_lit(4), int_lit(-1)])
+
+        assert read_dim_vec_literal(v, mk_builtin_env(), LocalContext(),
+                                    MetaVarContext()) == [4, -1]
+
+    def test_term_reduction(self):
+        """An unreduced ``dim_mul`` application is WHNF reduced."""
+        a = mk_dim_vec_literal([1, 0, -2, 0, 0, 0, 0])
+        b = mk_dim_vec_literal([0, 1, 0, 0, 0, 0, 0])
+        prod = App(App(Const("dim_mul", ()), a), b)
+
+        assert read_dim_vec_literal(prod, mk_builtin_env(), LocalContext(),
+                                    MetaVarContext()) == [
+                                        1, 1, -2, 0, 0, 0, 0
+                                    ]
+
+    def test_non_vector(self):
+        """A non ``Vec.cons`` / ``Vec.nil`` term gives ``None``."""
+        assert read_dim_vec_literal(Const("dim_mul", ()), mk_builtin_env(),
+                                    LocalContext(), MetaVarContext()) is None
+
+
+class TestMkVecLiteral:
+    """
+    Tests for ``mk_vec_literal``.
+    """
+
+    def test_empty_is_vec_nil(self):
+        """An empty element list is just ``Vec.nil elem_type``."""
+        v = mk_vec_literal(Const("Int", ()), [])
+
+        assert v == App(Const("Vec.nil", ()), Const("Int", ()))
+
+    def test_cons_chain(self):
+        """``Vec.cons`` chain should produce a list of Int elements."""
+        v = mk_vec_literal(
+            Const("Int", ()),
+            [int_lit(1), int_lit(0), int_lit(-2)])
+
+        assert read_dim_vec_literal(v, mk_builtin_env(), LocalContext(),
+                                    MetaVarContext()) == [1, 0, -2]
+
+    def test_cons_matches_tail_length(self):
+        """Each ``Vec.cons`` is indexed by the length of its tail."""
+        v = mk_vec_literal(Const("Int", ()), [int_lit(7), int_lit(8)])
+        head, args = get_app_fn_args(v)
+
+        # tail length should be 1
+        assert head == Const("Vec.cons", ()) and args[1] == Lit(1)
+
+
+class TestMkDimVecLiteral:
+    """
+    Tests for ``mk_dim_vec_literal``.
+    """
+
+    def test_SI_exponents(self):
+        """A SI exponent sequence should output an equal object."""
+        si_dims = [1, 1, -2, 0, 0, 0, 0]
+        v = mk_dim_vec_literal(si_dims)  # kg*m*s^-2
+
+        assert len(si_dims) == 7
+        assert read_dim_vec_literal(v, mk_builtin_env(), LocalContext(),
+                                    MetaVarContext()) == si_dims
+
+    def test_wrong_si_rejected(self):
+        """A sequence that is not 7 entries long is an error."""
+        non_si_dims = [1, 2, 3]
+        assert len(non_si_dims) != 7
+        with pytest.raises(ValueError):
+            mk_dim_vec_literal(non_si_dims)
+
+
+class TestConstVecMotive:
+    """
+    Tests for ``const_vec_motive``.
+    """
+
+    def test_binds_length_then_vector(self):
+        """The motive is ``Λ (n : Nat) (xs : Vec Int n). result_type``."""
+        m = const_vec_motive(Const("Int", ()))
+
+        assert (m.binder_name, m.body.binder_name) == ("n", "xs")
+
+    def test_body_result_type(self):
+        """Body ignores both binders and is ``result_type``."""
+        m = const_vec_motive(Const("Int", ()))
+
+        assert m.body.body == Const("Int", ())
+
+
+class TestConsCaseReturning:
+    """
+    Tests for ``cons_case_returning``.
+    """
+
+    def test_pick_head(self):
+        """``pick=2`` returns the ``hd`` binder under nested lambda
+        applications ``n, hd, tl, ih``."""
+        cc = cons_case_returning(Const("Int", ()), pick=2)
+
+        assert cc.body.body.body.body == BVar(2)
+
+    def test_pick_tail(self):
+        """``pick=1`` returns the ``tl`` binder."""
+        cc = cons_case_returning(Const("Int", ()), pick=1)
+
+        assert cc.body.body.body.body == BVar(1)
+
+
+class TestVecRecApp:
+    """
+    Tests for ``vec_rec_app``.
+    """
+
+    def test_reduces_vec_nil(self):
+        """``Vec.rec`` of an empty vector returns ``nil``."""
+        nil = App(Const("Vec.nil", ()), Const("Int", ()))
+        # 7 is Vec.nil case and 9 is Vec.cons case
+        t = vec_rec_app(const_vec_motive(Const("Int", ())), Lit(7), Lit(9),
+                        Lit(0), nil)
+
+        assert whnf_builtin(t) == Lit(7)
+
+    def test_reduces_on_vec_cons(self):
+        """``Vec.rec`` on a cons chain uses ``cons_case`` premise."""
+        v = mk_vec_literal(Const("Int", ()), [int_lit(5), int_lit(6)])
+        t = vec_rec_app(const_vec_motive(Const("Int", ())), int_lit(0),
+                        cons_case_returning(Const("Int", ()), pick=2), Lit(2),
+                        v)
+
+        assert whnf_builtin(t) == int_lit(5)
+
+
+class TestDimVecNth:
+    """
+    Tests for ``dim_vec_nth``.
+    """
+
+    def test_reads_each_position(self):
+        """``dim_vec_nth`` extracts the ``k`` indexed ``Int`` exponent."""
+        v = mk_dim_vec_literal([1, 0, -2, 0, 0, 0, 0])  # kg*s^-2
+
+        assert whnf_builtin(dim_vec_nth(v, 0)) == int_lit(1)
+        assert whnf_builtin(dim_vec_nth(v, 1)) == int_lit(0)
+        # a negative exponent is ``Int.negSucc``
+        assert whnf_builtin(dim_vec_nth(v, 2)) == int_lit(-2)
+
+
+class TestIntRecApp:
+    """
+    Tests for ``int_rec_app``.
+    """
+
+    NAT = Const("Nat", ())
+
+    def branches(self):
+        """``(on_ofnat, on_negsucc)`` returning ``0`` and ``1``."""
+        return (Lam("n", self.NAT, Lit(0), BinderInfo.DEFAULT),
+                Lam("n", self.NAT, Lit(1), BinderInfo.DEFAULT))
+
+    def test_selects_negsucc_branch(self):
+        """The ``on_negsucc`` branch fires for an ``Int.negSucc`` major."""
+        on_ofnat, on_negsucc = self.branches()
+        t = int_rec_app(on_ofnat, on_negsucc,
+                        App(Const("Int.negSucc", ()), Lit(3)))
+
+        assert whnf_builtin(t) == Lit(1)
+
+    def test_selects_ofnat_branch(self):
+        """The ``on_ofnat`` branch fires for an ``Int.ofNat`` major."""
+        on_ofnat, on_negsucc = self.branches()
+        t = int_rec_app(on_ofnat, on_negsucc,
+                        App(Const("Int.ofNat", ()), Lit(3)))
+
+        assert whnf_builtin(t) == Lit(0)
+
+
+class TestIntValues:
+    """
+    Tests for ``mk_int_neg/subNatNat/add/sub/mul_value`` Int operators.
+    """
+
+    def test_neg(self):
+        """
+        ``Int.neg`` should produce a negative int if input is positve
+        and viceversa.
+        """
+        assert def_eq_builtin(App(Const("Int.neg", ()), int_lit(2)),
+                              int_lit(-2))
+        assert def_eq_builtin(App(Const("Int.neg", ()), int_lit(-3)),
+                              int_lit(3))
+
+    def test_subnatnat(self):
+        """``Int.subNatNat m n`` is ``m - n```."""
+        nat_subs = App(App(Const("Int.subNatNat", ()), Lit(2)), Lit(5))
+
+        assert def_eq_builtin(nat_subs, int_lit(-3))
+
+        # Int.add uses ``Int.subNatNat``
+        s = App(App(Const("Int.add", ()), int_lit(2)), int_lit(-5))
+
+        assert def_eq_builtin(s, int_lit(-3))
+
+    def test_sub(self):
+        """``Int.sub t1 t2`` should produce a correct int result."""
+        s = App(App(Const("Int.sub", ()), int_lit(1)), int_lit(3))
+        assert def_eq_builtin(s, int_lit(-2))
+
+    def test_mul_negative_operand(self):
+        """``Int.mul`` should get the correct sign for negative values."""
+        m = App(App(Const("Int.mul", ()), int_lit(-2)), int_lit(3))
+
+        assert def_eq_builtin(m, int_lit(-6))
+
+
+class TestDimValues:
+    """
+    Tests for ``mk_dim_componentwise_value`` / ``mk_dim_pow_value`` from
+    ``mk_dim_vec_literal``.
+    """
+
+    def read(self, expr):
+        """
+        Helper method for kernel reduction of an expression and return it back
+        as a ``list[int]``.
+        """
+        return read_dim_vec_literal(expr, mk_builtin_env(), LocalContext(),
+                                    MetaVarContext())
+
+    def test_dim_mul_adds_exponents(self):
+        """``dim_mul`` adds ``Int`` exponents componentwise."""
+        a = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0])
+        b = mk_dim_vec_literal([0, -1, 1, 0, 0, 0, 0])
+
+        assert self.read(App(App(Const("dim_mul", ()), a),
+                             b)) == [1, 0, -1, 0, 0, 0, 0]
+
+    def test_dim_div_subtracts_exponents(self):
+        """``dim_div`` subtracts ``Int`` exponents componentwise."""
+        a = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0])
+        b = mk_dim_vec_literal([0, 1, 0, 0, 0, 0, 0])
+
+        assert self.read(App(App(Const("dim_div", ()), a),
+                             b)) == [1, 0, -2, 0, 0, 0, 0]
+
+    def test_dim_pow_scales_every_exponent(self):
+        """``dim_pow u p`` multiplies each exponent of ``u`` by ``p``."""
+        u = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0])  # kg*m*s^-2
+
+        assert self.read(App(App(Const("dim_pow", ()), u),
+                             int_lit(2))) == [2, 2, -4, 0, 0, 0, 0]
+        # a power of -1 negates every exponent
+        assert self.read(App(App(Const("dim_pow", ()), u),
+                             int_lit(-1))) == [-1, -1, 2, 0, 0, 0, 0]
+
+
 class TestRegOps:
     """
     Tests for helpers that register operations of inductive types.
@@ -835,3 +1137,28 @@ class TestRegOps:
         for n in ("Mat.matmul", "Mat.madd", "Mat.add_scalar",
                   "Mat.concat_rows"):
             assert n in env.constants
+
+    def test_reg_int_ops(self):
+        """
+        ``reg_int_ops`` registers ``Int`` arithmetic (``Int.neg`` /
+        ``Int.subNatNat`` / ``Int.add`` / ``Int.sub`` / ``Int.mul``) with
+        reducible bodies.
+        """
+        env = inductives_only_env()
+        reg_int_ops(env)
+        for n in ("Int.neg", "Int.subNatNat", "Int.add", "Int.sub", "Int.mul"):
+            assert env.constants[n].value is not None
+
+    def test_reg_dim_ops(self):
+        """
+        ``reg_dim_ops`` registers the ``DimVec`` alias, ``dim.one`` and the
+        componentwise ``dim_mul`` / ``dim_div`` / ``dim_pow`` operators.
+        """
+        env = inductives_only_env()
+        reg_nat_ops(env)
+        reg_int_ops(env)
+        reg_dim_ops(env)
+        assert "DimVec" in env.constants
+        assert env.constants["dim.one"].value is not None
+        for n in ("dim_mul", "dim_div", "dim_pow"):
+            assert env.constants[n].value is not None

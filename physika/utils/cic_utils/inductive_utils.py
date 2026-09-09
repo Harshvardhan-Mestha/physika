@@ -2,18 +2,28 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 from physika.core.expr import (Const, Expr, Lam, App, ForallE, MData, LetE,
                                Proj, BVar, FVar, BinderInfo, TYPE_0, Sort,
-                               PROP)
+                               PROP, Lit)
 from physika.core.level import LParam, LSucc, LZero
 from physika.core.environment import ConstantInfo, Environment, InductiveInfo
 from physika.core.inductive import (InductiveDecl, Recursor, RecursorRule,
                                     Constructor)
-from physika.core.local_context import LocalContext
+
 from physika.core.metavar import MetaVarContext
+from physika.core.local_context import LocalContext
 from physika.core.reduction import is_def_eq, whnf
 from physika.core.kernel import check as kernel_check, KernelException
 from physika.utils.cic_utils.expr_utils import (abstract_fvars,
                                                 get_app_fn_args, instantiate,
                                                 instantiate1, mk_arrow)
+
+NAT = Const("Nat", ())
+BOOL = Const("Bool", ())
+ZERO = Const("Nat.zero", ())
+SUCC = Const("Nat.succ", ())
+INT = Const("Int", ())
+
+# A SI dimension is a ``Vec Int 7`` CIC term.
+SI_BASE_UNITS: Tuple[str, ...] = ("kg", "m", "s", "A", "K", "mol", "cd")
 
 
 def name_appears(name: str, expr: Expr) -> bool:
@@ -182,11 +192,450 @@ def check_positivity_for_inductive(decl: "InductiveDecl",
     return None
 
 
-NAT = Const("Nat", ())
-BOOL = Const("Bool", ())
-ZERO = Const("Nat.zero", ())
-SUCC = Const("Nat.succ", ())
-INT = Const("Int", ())
+def int_lit(k: int) -> Expr:
+    """
+    Build a ``Int`` CIC term including negative values.
+
+    ``Int.ofNat k`` for ``k >= 0``, ``Int.negSucc (-k-1)`` otherwise.
+
+    Parameters
+    ----------
+    k : int
+        Integer to encode.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import int_lit
+    >>> int_lit(3)
+    App(func=Const(name='Int.ofNat', levels=()), arg=Lit(val=3))
+    >>> int_lit(-2)
+    App(func=Const(name='Int.negSucc', levels=()), arg=Lit(val=1))
+    """
+    if k >= 0:
+        return App(Const("Int.ofNat", ()), Lit(k))
+    return App(Const("Int.negSucc", ()), Lit(-k - 1))
+
+
+def mk_vec_literal(elem_type: Expr, elements: List[Expr]) -> Expr:
+    """
+    Build a ``Vec elem_type n`` CIC term. Represent a ``Vec.cons`` chain
+    terminated by ``Vec.nil``, with ``n = len(elements)``.
+
+    Parameters
+    ----------
+    elem_type : Expr
+        Type of element(s) to construct a ``Vec``.
+    elements : list
+        Elements that are terms of type ``elem_type``.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     mk_vec_literal, int_lit, read_dim_vec_literal)
+    >>> from physika.core.expr import Const
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env = mk_builtin_env()
+    >>> v = mk_vec_literal(Const("Int", ()),
+    ...                    [int_lit(1), int_lit(0), int_lit(-2)])
+    >>> read_dim_vec_literal(v, env, LocalContext(), MetaVarContext())
+    [1, 0, -2]
+    >>> mk_vec_literal(Const("Int", ()), []).func  # empty list
+    Const(name='Vec.nil', levels=())
+    """
+    vec: Expr = App(Const("Vec.nil", ()), elem_type)
+    for length, elem in enumerate(reversed(elements)):
+        vec = App(
+            App(App(App(Const("Vec.cons", ()), elem_type), Lit(length)), elem),
+            vec)
+    return vec
+
+
+def mk_dim_vec_literal(exponents: Iterable[int]) -> Expr:
+    """
+    Build a ``Vec Int 7`` CIC literal from a sequence of integer
+    exponents.  For now, length is fixed to 7 (supported SI units), but this
+    can be extended to ``n``, by implementing user inductive types.
+
+    Parameters
+    ----------
+    exponents : Iterable[int]
+        List of 7 SI units integer exponents.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     mk_dim_vec_literal, read_dim_vec_literal)
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env = mk_builtin_env()
+    >>> v = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0]) # kg*m*s^-2
+    >>> read_dim_vec_literal(v, env, LocalContext(), MetaVarContext())
+    [1, 1, -2, 0, 0, 0, 0]
+    """
+    exps = list(exponents)
+    if len(exps) != len(SI_BASE_UNITS):
+        raise ValueError(
+            f"expected {len(SI_BASE_UNITS)} exponents, got {len(exps)}")
+    return mk_vec_literal(INT, [int_lit(k) for k in exps])
+
+
+def read_dim_vec_literal(expr: Expr, env: Environment, lctx: LocalContext,
+                         mctx: MetaVarContext) -> Optional[list]:
+    """
+    WHNF-reduce a ``Vec Int n`` term and read its exponents back as a
+    ``list[int]``. Returns ``None`` if ``expr`` does not reduce to a
+    ``Vec.cons`` or ``Vec.nil`` chain of ``Int`` literals.
+
+    Parameters
+    ----------
+    expr : Expr
+        A ``Vec Int n`` CIC term (reduced or not).
+    env : Environment
+        CIC environment holding the reduction rules.
+    lctx : LocalContext
+        Local binder context for reduction.
+    mctx : MetaVarContext
+        Metavariable context for reduction
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     read_dim_vec_literal, mk_dim_vec_literal)
+    >>> from physika.core.expr import App, Const
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env = mk_builtin_env()
+    >>> a = mk_dim_vec_literal([1, 0, -2, 0, 0, 0, 0])  # kg*s^-2
+    >>> b = mk_dim_vec_literal([0, 1, 0, 0, 0, 0, 0])  # m
+    >>> prod = App(App(Const("dim_mul", ()), a), b)  # unreduced
+    >>> read_dim_vec_literal(prod, env, LocalContext(), MetaVarContext())
+    [1, 1, -2, 0, 0, 0, 0]
+    >>> read_dim_vec_literal(Const("dim_mul", ()), env,
+    ...                      LocalContext(), MetaVarContext()) is None
+    True
+    """
+    from physika.core.reduction import whnf, succ_chain_nat_int
+
+    result: List[int] = []
+    cur = expr
+    while True:
+        cur_w = whnf(cur, env, lctx, mctx)
+        head, args = get_app_fn_args(cur_w)
+        if isinstance(head, Const) and head.name == "Vec.nil":
+            return result
+        if (isinstance(head, Const) and head.name == "Vec.cons"
+                and len(args) == 4):
+            value_w = whnf(args[2], env, lctx, mctx)
+            ihead, iargs = get_app_fn_args(value_w)
+            # an Int literal might contain a Nat literal
+            inner_n = (succ_chain_nat_int(iargs[0], env, lctx, mctx)
+                       if len(iargs) == 1 else None)
+            if (isinstance(ihead, Const) and ihead.name == "Int.ofNat"
+                    and inner_n is not None):
+                result.append(inner_n)
+            elif (isinstance(ihead, Const) and ihead.name == "Int.negSucc"
+                  and inner_n is not None):
+                result.append(-(inner_n + 1))
+            else:
+                return None
+            cur = args[3]
+            continue
+        return None
+
+
+def vec_rec_app(motive: Expr, nil_case: Expr, cons_case: Expr, n_expr: Expr,
+                xs: Expr) -> Expr:
+    """
+    Apply ``Vec Int`` recursor to ``xs``.
+
+    A term reduces by the ``Vec.rec`` ι-rule when ``xs`` is a
+    ``Vec.nil`` or ``Vec.cons`` chain.
+
+    Parameters
+    ----------
+    motive : Expr
+        Eliminator's return type.
+    nil_case : Expr
+        Value returned for ``xs = Vec.nil``.
+    cons_case : Expr
+        Value for ``xs = Vec.cons n hd tl`` give ``ih``
+    n_expr : Expr
+        Vector's length represetnted as Nat literal.
+    xs : Expr
+        ``Vec Int n_expr`` expression.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     vec_rec_app, const_vec_motive)
+    >>> from physika.core.expr import Const, App, Lit
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.core.reduction import whnf
+    >>> env = mk_builtin_env()
+    >>> nil = App(Const("Vec.nil", ()), Const("Int", ()))
+    >>> # an empty vector Vec.rec returns nil_case
+    >>> t = vec_rec_app(const_vec_motive(Const("Int", ())),
+    ...                  Lit(0), Lit(0), Lit(0), nil)
+    >>> whnf(t, env, LocalContext(), MetaVarContext())
+    Lit(val=0)
+    """
+    rec_ref = Const("Vec.rec", (LSucc(LZero()), ))
+    return App(
+        App(App(App(App(App(rec_ref, INT), motive), nil_case), cons_case),
+            n_expr), xs)
+
+
+def const_vec_motive(result_type: Expr) -> Expr:
+    """
+    ``Vec.rec`` motive for result type: ``Λ (n : Nat) (xs : Vec Int n).
+    result_type``.
+
+    Used when the recursor's return type does not depend on length
+    or the vector. This is a helper fucntion for ``dim_vec_nth``, where
+    a known postion is passed.
+
+    Parameters
+    ----------
+    result_type : Expr
+        Type that each branch of the elimination returns.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import const_vec_motive
+    >>> from physika.core.expr import Const
+    >>> m = const_vec_motive(Const("Int", ()))
+    >>> m.binder_name, m.body.binder_name
+    ('n', 'xs')
+    """
+    xs_type = App(App(Const("Vec", ()), INT), BVar(0))
+    return Lam("n", NAT, Lam("xs", xs_type, result_type, BinderInfo.DEFAULT),
+               BinderInfo.DEFAULT)
+
+
+def cons_case_returning(result_type: Expr, pick: int) -> Expr:
+    """
+    ``Vec.cons`` minor premise that returns one of its bound arguments witouth
+    recursion.
+
+
+    Parameters
+    ----------
+    result_type : Expr
+        Type of ``ih`` binder which is ``Int`` for head pick and
+        ``Vec Int (len - 1)`` for a tail pick.
+    pick : int
+        ``2`` to return head ``hd``, ``1`` to return tail ``tl``.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     cons_case_returning)
+    >>> from physika.core.expr import Const
+    >>> cons_case_returning(Const("Int", ()), pick=2).body.body.body.body
+    BVar(idx=2)
+    """
+    tl_type = App(App(Const("Vec", ()), INT), BVar(1))
+    return Lam(
+        "n", NAT,
+        Lam(
+            "hd", INT,
+            Lam("tl", tl_type,
+                Lam("ih", result_type, BVar(pick), BinderInfo.DEFAULT),
+                BinderInfo.DEFAULT), BinderInfo.DEFAULT), BinderInfo.DEFAULT)
+
+
+def dim_vec_nth(u: Expr, k: int) -> Expr:
+    """
+    Extract ``k`` indexed element of ``u : Vec Int 7``. ``k``
+    steps starting form the tail and then one step for the head using
+    ``Vec.rec`` with a constant motive.
+
+    Parameters
+    ----------
+    u : Expr
+        ``Vec Int 7`` CIC term.
+    k : int
+        Position to read (``0 <= k < 7``).
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     dim_vec_nth, mk_dim_vec_literal)
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.core.reduction import whnf
+    >>> env = mk_builtin_env()
+    >>> v = mk_dim_vec_literal([1, 0, -2, 0, 0, 0, 0])   # kg*s^-2
+    >>> whnf(dim_vec_nth(v, 0), env, LocalContext(), MetaVarContext())
+    App(func=Const(name='Int.ofNat', levels=()), arg=Lit(val=1))
+    >>> whnf(dim_vec_nth(v, 2), env, LocalContext(), MetaVarContext())
+    App(func=Const(name='Int.negSucc', levels=()), arg=Lit(val=1))
+    """
+    cur = u
+    cur_len = len(SI_BASE_UNITS)
+    for _ in range(k):
+        tgt_len = cur_len - 1
+        zero_nil = mk_vec_literal(INT, [int_lit(0)] * tgt_len)
+        result_type = App(App(Const("Vec", ()), INT), Lit(tgt_len))
+        cur = vec_rec_app(const_vec_motive(result_type), zero_nil,
+                          cons_case_returning(result_type, pick=1),
+                          Lit(cur_len), cur)
+        cur_len = tgt_len
+    return vec_rec_app(const_vec_motive(INT), int_lit(0),
+                       cons_case_returning(INT, pick=2), Lit(cur_len), cur)
+
+
+def mk_dim_componentwise_value(int_op_name: str) -> Expr:
+    """
+    Build a reducible body for ``dim_mul`` and  ``dim_div``.
+
+    A ``DimVec`` operation (``dim_<op> (u1 u2 : DimVec) : DimVec``)
+    applies ``Int`` componentwise operation across eahc ``SI_BASE_UNITS``
+    position (``dim_mul`` uses ``Int.add``, ``dim_div`` uses ``Int.sub``).
+
+    Parameters
+    ----------
+    int_op_name : str
+        ``"Int.add"`` or ``"Int.sub"``.
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     mk_dim_vec_literal, read_dim_vec_literal)
+    >>> env = mk_builtin_env()
+    >>> a = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0]) # kg*m*s^2
+    >>> b = mk_dim_vec_literal([0, -1, 1, 0, 0, 0, 0]) # m^-1*s
+    >>> read_dim_vec_literal(App(App(Const("dim_mul", ()), a), b),
+    ...                      env, LocalContext(), MetaVarContext())
+    [1, 0, -1, 0, 0, 0, 0]
+    """
+
+    lctx = LocalContext()
+    lctx, u1 = lctx.push_local("u1", Const("DimVec", ()))
+    lctx, u2 = lctx.push_local("u2", Const("DimVec", ()))
+
+    n = len(SI_BASE_UNITS)
+    vec: Expr = App(Const("Vec.nil", ()), INT)
+    length = 0
+    for idx in reversed(range(n)):
+        component = App(App(Const(int_op_name, ()), dim_vec_nth(u1, idx)),
+                        dim_vec_nth(u2, idx))
+        vec = App(
+            App(App(App(Const("Vec.cons", ()), INT), Lit(length)), component),
+            vec)
+        length += 1
+    return lctx.mk_lambda([u1, u2], vec)
+
+
+def mk_dim_pow_value() -> Expr:
+    """
+    Build reducible body of ``dim_pow (u : DimVec) (p : Int) :
+    DimVec``. Each component scaled by ``Int.mul`` with ``p``.
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     mk_dim_vec_literal, read_dim_vec_literal, int_lit)
+    >>> env = mk_builtin_env()   # registers dim_pow with this body
+    >>> u = mk_dim_vec_literal([1, 1, -2, 0, 0, 0, 0])   # kg*m*s^2
+    >>> read_dim_vec_literal(App(App(Const("dim_pow", ()), u), int_lit(2)),
+    ...                      env, LocalContext(), MetaVarContext())
+    [2, 2, -4, 0, 0, 0, 0]
+    >>> read_dim_vec_literal(App(App(Const("dim_pow", ()), u), int_lit(-1)),
+    ...                      env, LocalContext(), MetaVarContext())
+    [-1, -1, 2, 0, 0, 0, 0]
+    """
+
+    lctx = LocalContext()
+    lctx, u = lctx.push_local("u", Const("DimVec", ()))
+    lctx, p = lctx.push_local("p", INT)
+
+    n = len(SI_BASE_UNITS)
+    vec = App(Const("Vec.nil", ()), INT)
+    length = 0
+    for idx in reversed(range(n)):
+        component = App(App(Const("Int.mul", ()), dim_vec_nth(u, idx)), p)
+        vec = App(
+            App(App(App(Const("Vec.cons", ()), INT), Lit(length)), component),
+            vec)
+        length += 1
+    return lctx.mk_lambda([u, p], vec)
+
+
+def reg_dim_ops(env: Environment) -> None:
+    """
+    Register dimensional analysis inductive type at CIC environment and
+    operators for reducing during kernel verification. ``DimVec := Vec Int 7``
+    δ(delta) reducible definition, one ``Int`` exponent per ``SI_BASE_UNITS``
+    entry. ``Quantity : DimVec → Type0`` represents the type of real quantities
+    with a given dimension vector. ``dim.one : DimVec`` represents a constant
+    (Const) dimensionless vector. ``dim_mul``, ``dim_div``, and ``dim_pow``
+    allow componentwise ``Int`` arithmetic on ``DimVec`` (similar what
+    ``Nat.add`` does).
+
+    Parameters
+    ----------
+    env : Environment
+        CIC environment with ``Int`` arithmetic rules and ``Vec``
+        with its recursor.
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.utils.cic_utils.inductive_utils import (
+    ...     mk_dim_vec_literal, read_dim_vec_literal)
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> kg = mk_dim_vec_literal([1, 0, 0, 0, 0, 0, 0])
+    >>> accel = mk_dim_vec_literal([0, 1, -2, 0, 0, 0, 0])
+    >>> force = App(App(Const("dim_mul", ()), kg), accel)
+    >>> read_dim_vec_literal(force, env, lctx, mctx) # kernel-reduced
+    [1, 1, -2, 0, 0, 0, 0]
+    """
+    n = len(SI_BASE_UNITS)
+    DIM_VEC = Const("DimVec", ())
+    dim_binop = mk_arrow(DIM_VEC, mk_arrow(DIM_VEC, DIM_VEC))
+
+    env.add_constant(
+        ConstantInfo(name="DimVec",
+                     level_params=(),
+                     type=TYPE_0,
+                     value=App(App(Const("Vec", ()), INT), Lit(n))))
+    env.add_constant(
+        ConstantInfo(name="Quantity",
+                     level_params=(),
+                     type=mk_arrow(DIM_VEC, TYPE_0),
+                     value=None))
+    env.add_constant(
+        ConstantInfo(name="dim.one",
+                     level_params=(),
+                     type=DIM_VEC,
+                     value=mk_dim_vec_literal([0] * n)))
+    env.add_constant(
+        ConstantInfo(name="dim_mul",
+                     level_params=(),
+                     type=dim_binop,
+                     value=mk_dim_componentwise_value("Int.add")))
+    env.add_constant(
+        ConstantInfo(name="dim_div",
+                     level_params=(),
+                     type=dim_binop,
+                     value=mk_dim_componentwise_value("Int.sub")))
+    env.add_constant(
+        ConstantInfo(name="dim_pow",
+                     level_params=(),
+                     type=mk_arrow(DIM_VEC, mk_arrow(INT, DIM_VEC)),
+                     value=mk_dim_pow_value()))
 
 
 def self_reference_indices(type_name: str, param_fvars: List["FVar"],
@@ -292,7 +741,6 @@ def open_index_tele(
 
     Examples
     --------
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.expr import ForallE, Const, Sort, BinderInfo
     >>> from physika.core.level import LSucc, LZero
     >>> from physika.utils.cic_utils.inductive_utils import open_index_tele
@@ -721,7 +1169,6 @@ def mk_nat_add_value() -> Expr:
     >>> from physika.core.inductive import mk_builtin_env
     >>> from physika.core.expr import App, Const, Lit
     >>> from physika.core.reduction import whnf
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.metavar import MetaVarContext
     >>> env = mk_builtin_env()
     >>> two_plus_three = App(App(Const("Nat.add", ()), Lit(2)), Lit(3))
@@ -753,7 +1200,6 @@ def mk_nat_mul_value() -> Expr:
     >>> from physika.core.inductive import mk_builtin_env
     >>> from physika.core.expr import App, Const, Lit
     >>> from physika.core.reduction import whnf
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.metavar import MetaVarContext
     >>> env = mk_builtin_env()
     >>> expr = App(App(Const("Nat.mul", ()), Lit(3)), Lit(4))
@@ -787,7 +1233,6 @@ def mk_nat_pred_value() -> Expr:
     >>> from physika.core.inductive import mk_builtin_env
     >>> from physika.core.expr import App, Const, Lit
     >>> from physika.core.reduction import whnf
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.metavar import MetaVarContext
     >>> env = mk_builtin_env()
     >>> whnf(App(Const("Nat.pred", ()), Lit(5)),
@@ -817,7 +1262,6 @@ def mk_nat_sub_value() -> Expr:
     >>> from physika.core.inductive import mk_builtin_env
     >>> from physika.core.expr import App, Const, Lit
     >>> from physika.core.reduction import whnf
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.metavar import MetaVarContext
     >>> env = mk_builtin_env()
     >>> whnf(App(App(Const("Nat.sub", ()), Lit(5)), Lit(3)),
@@ -862,6 +1306,328 @@ def mk_int_decl() -> InductiveDecl:
         ),
         is_recursive=False,
     )
+
+
+def int_rec_app(on_ofnat: Expr, on_negsucc: Expr, major: Expr) -> Expr:
+    """
+    Apply ``Int`` recursor to ``major`` premise with a constant ``Int`` motive.
+
+    Builds ``Int.rec (fun _ => Int) on_ofnat on_negsucc major`` expression that
+    reduces by ``Int.rec`` ι-rule once major premise is a ``Int.ofNat`` or
+    ``Int.negSucc``.
+
+    Parameters
+    ----------
+    on_ofnat : Expr
+        Branch for ``major = Int.ofNat n``.
+    on_negsucc : Expr
+        Branch for ``major = Int.negSucc n``.
+    major : Expr
+        ``Int`` expression.
+
+    Examples
+    --------
+    >>> from physika.utils.cic_utils.inductive_utils import int_rec_app
+    >>> from physika.core.expr import App, Const, Lit, Lam, BinderInfo
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.local_context import LocalContext
+    >>> from physika.core.metavar import MetaVarContext
+    >>> from physika.core.reduction import whnf
+    >>> env = mk_builtin_env()
+    >>> nat = Const("Nat", ())
+    >>> # 0 on ofNat, 1 on negSucc
+    >>> t = int_rec_app(Lam("n", nat, Lit(0), BinderInfo.DEFAULT),
+    ...                 Lam("n", nat, Lit(1), BinderInfo.DEFAULT),
+    ...                 App(Const("Int.negSucc", ()), Lit(3)))
+    >>> whnf(t, env, LocalContext(), MetaVarContext())
+    Lit(val=1)
+    """
+    int_rec_ref = Const("Int.rec", (LSucc(LZero()), ))
+    int_motive = Lam("_", INT, INT, BinderInfo.DEFAULT)
+    return App(App(App(App(int_rec_ref, int_motive), on_ofnat), on_negsucc),
+               major)
+
+
+def mk_int_neg_value() -> Expr:
+    """
+    Build reducible body of ``Int.neg``.
+
+    Following Lean 4 defintion of ``Int.neg``:
+    ``Int.neg (ofNat 0) = ofNat 0``,
+    ``Int.neg (ofNat (succ k)) = negSucc k``,
+    ``Int.neg (negSucc n) = ofNat (succ n)``
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const, Lit
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> neg2 = App(Const("Int.neg", ()), App(Const("Int.ofNat", ()), Lit(2)))
+    >>> exp = App(Const("Int.negSucc", ()), Lit(1)) # -2
+    >>> is_def_eq(neg2, exp, env, lctx, mctx)[0]
+    True
+    """
+    lctx = LocalContext()
+    lctx, i = lctx.push_local("i", INT)
+    lctx, n = lctx.push_local("n", NAT)
+    lctx, k = lctx.push_local("k", NAT)
+    lctx, ih = lctx.push_local("ih", INT)
+
+    nat_motive = Lam("_", NAT, INT, BinderInfo.DEFAULT)
+    nat_rec_ref = Const("Nat.rec", (LSucc(LZero()), ))
+
+    # ofNat n:
+    # if n==0:
+    #   Nat.rec on n  ->  ofNat 0
+    # else:
+    #   negSucc (n-1)
+    ofnat_zero = App(Const("Int.ofNat", ()), ZERO)
+    negsucc_k = App(Const("Int.negSucc", ()), k)
+    ofnat_branch_body = App(
+        App(App(App(nat_rec_ref, nat_motive), ofnat_zero),
+            lctx.mk_lambda([k, ih], negsucc_k)), n)
+    ofnat_branch = lctx.mk_lambda([n], ofnat_branch_body)
+
+    # case of negSucc n:  -(-(n+1)) = n+1
+    negsucc_branch = lctx.mk_lambda([n],
+                                    App(Const("Int.ofNat", ()), App(SUCC, n)))
+
+    return lctx.mk_lambda([i], int_rec_app(ofnat_branch, negsucc_branch, i))
+
+
+def mk_int_subnatnat_value() -> Expr:
+    """
+    Build a reducible body of ``Int.subNatNat`` that represent a substraction
+    of two natural numbers as integers.
+
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const, Lit
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> snn = App(App(Const("Int.subNatNat", ()), Lit(2)), Lit(5))
+    >>> exp = App(Const("Int.negSucc", ()), Lit(2))
+    >>> is_def_eq(snn, exp, env, lctx, mctx)[0]
+    True
+    """
+
+    lctx = LocalContext()
+    lctx, m = lctx.push_local("m", NAT)
+    lctx, n = lctx.push_local("n", NAT)
+    lctx, k = lctx.push_local("k", NAT)
+    lctx, ih = lctx.push_local("ih", INT)
+
+    nat_motive = Lam("_", NAT, INT, BinderInfo.DEFAULT)
+    nat_rec_ref = Const("Nat.rec", (LSucc(LZero()), ))
+
+    base = App(Const("Int.ofNat", ()), App(App(Const("Nat.sub", ()), m), n))
+    step = lctx.mk_lambda([k, ih], App(Const("Int.negSucc", ()), k))
+    major = App(App(Const("Nat.sub", ()), n), m)
+    body = App(App(App(App(nat_rec_ref, nat_motive), base), step), major)
+    return lctx.mk_lambda([m, n], body)
+
+
+def mk_int_add_value() -> Expr:
+    """
+    Build reducible body of ``Int.add``.
+    Follwing Lean 4's definition, a nested ``Int.rec`` use ``Int.subNatNat``
+    if there are positive and negative sings mixed:
+
+    * ofNat n1 + ofNat n2  = ofNat (n1 + n2)
+    * ofNat n1 + negSucc n2 = subNatNat n1 (n2 + 1)
+    * negSucc n1 + ofNat n2 = subNatNat n2 (n1 + 1)
+    * negSucc n1 + negSucc n2 = negSucc ((n1 + n2) + 1)
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const, Lit
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> # 2 + (-1) = 1
+    >>> s = App(App(Const("Int.add", ()),
+    ...             App(Const("Int.ofNat", ()), Lit(2))),
+    ...         App(Const("Int.negSucc", ()), Lit(0)))
+    >>> is_def_eq(s, App(Const("Int.ofNat", ()), Lit(1)), env, lctx, mctx)[0]
+    True
+    """
+
+    lctx = LocalContext()
+    lctx, i1 = lctx.push_local("i1", INT)
+    lctx, i2 = lctx.push_local("i2", INT)
+    lctx, n1 = lctx.push_local("n1", NAT)
+    lctx, n2 = lctx.push_local("n2", NAT)
+
+    nat_add = Const("Nat.add", ())
+    subnn = Const("Int.subNatNat", ())
+
+    ofnat_ofnat = App(Const("Int.ofNat", ()), App(App(nat_add, n1), n2))
+    ofnat_negsucc = App(App(subnn, n1), App(SUCC, n2))
+    negsucc_ofnat = App(App(subnn, n2), App(SUCC, n1))
+    negsucc_negsucc = App(Const("Int.negSucc", ()),
+                          App(SUCC, App(App(nat_add, n1), n2)))
+
+    inner_ofnat_branch = int_rec_app(
+        lctx.mk_lambda([n2], ofnat_ofnat),
+        lctx.mk_lambda([n2], ofnat_negsucc),
+        i2,
+    )
+    inner_negsucc_branch = int_rec_app(
+        lctx.mk_lambda([n2], negsucc_ofnat),
+        lctx.mk_lambda([n2], negsucc_negsucc),
+        i2,
+    )
+
+    body = int_rec_app(
+        lctx.mk_lambda([n1], inner_ofnat_branch),
+        lctx.mk_lambda([n1], inner_negsucc_branch),
+        i1,
+    )
+    return lctx.mk_lambda([i1, i2], body)
+
+
+def mk_int_sub_value() -> Expr:
+    """
+    Build reducible body of ``Int.sub``:
+
+    ``Int.sub i1 i2 := Int.add i1 (Int.neg i2)``
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const, Lit
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.local_context import LocalContext
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> # 1 - 3 = -2
+    >>> s = App(App(Const("Int.sub", ()),
+    ...             App(Const("Int.ofNat", ()), Lit(1))),
+    ...         App(Const("Int.ofNat", ()), Lit(3)))
+    >>> is_def_eq(s, App(Const("Int.negSucc", ()), Lit(1)), env, lctx, mctx)[0]
+    True
+    """
+    lctx = LocalContext()
+    lctx, i1 = lctx.push_local("i1", INT)
+    lctx, i2 = lctx.push_local("i2", INT)
+    body = App(App(Const("Int.add", ()), i1), App(Const("Int.neg", ()), i2))
+    return lctx.mk_lambda([i1, i2], body)
+
+
+def mk_int_mul_value() -> Expr:
+    """
+    Build a reducible body for ``Int.mul``. Following Lean 4 implementation:
+
+    ofNat n1 * ofNat n2= ofNat (n1 * n2)
+    ofNat n1 * negSucc n2 = neg (ofNat (n1 * (n2 + 1)))
+    negSucc n1* ofNat n2 = neg (ofNat ((n1 + 1) * n2))
+    negSucc n1 * negSucc n2= ofNat ((n1 + 1) * (n2 + 1))
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> from physika.core.expr import App, Const, Lit
+    >>> from physika.core.reduction import is_def_eq
+    >>> from physika.core.metavar import MetaVarContext
+    >>> env, lctx, mctx = mk_builtin_env(), LocalContext(), MetaVarContext()
+    >>> # (-2) * 3 = -6
+    >>> s = App(App(Const("Int.mul", ()),
+    ...             App(Const("Int.negSucc", ()), Lit(1))),
+    ...         App(Const("Int.ofNat", ()), Lit(3)))
+    >>> is_def_eq(s, App(Const("Int.negSucc", ()), Lit(5)), env, lctx, mctx)[0]
+    True
+    """
+
+    lctx = LocalContext()
+    lctx, i1 = lctx.push_local("i1", INT)
+    lctx, i2 = lctx.push_local("i2", INT)
+    lctx, n1 = lctx.push_local("n1", NAT)
+    lctx, n2 = lctx.push_local("n2", NAT)
+
+    nat_mul = Const("Nat.mul", ())
+    int_neg = Const("Int.neg", ())
+    ofnat = Const("Int.ofNat", ())
+
+    ofnat_ofnat = App(ofnat, App(App(nat_mul, n1), n2))
+    ofnat_negsucc = App(int_neg,
+                        App(ofnat, App(App(nat_mul, n1), App(SUCC, n2))))
+    negsucc_ofnat = App(int_neg,
+                        App(ofnat, App(App(nat_mul, App(SUCC, n1)), n2)))
+    negsucc_negsucc = App(ofnat, App(App(nat_mul, App(SUCC, n1)),
+                                     App(SUCC, n2)))
+
+    inner_ofnat_branch = int_rec_app(
+        lctx.mk_lambda([n2], ofnat_ofnat),
+        lctx.mk_lambda([n2], ofnat_negsucc),
+        i2,
+    )
+    inner_negsucc_branch = int_rec_app(
+        lctx.mk_lambda([n2], negsucc_ofnat),
+        lctx.mk_lambda([n2], negsucc_negsucc),
+        i2,
+    )
+
+    body = int_rec_app(
+        lctx.mk_lambda([n1], inner_ofnat_branch),
+        lctx.mk_lambda([n1], inner_negsucc_branch),
+        i1,
+    )
+    return lctx.mk_lambda([i1, i2], body)
+
+
+def reg_int_ops(env: Environment) -> None:
+    """
+    Register ``Int`` arithmetic with ``Int.rec`` reducible definitions
+    the kernel can compute with.
+
+    Parameters
+    ----------
+    env : Environment
+        Environment with ``Int`` and its recursor.
+
+    Examples
+    --------
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> env = mk_builtin_env()
+    >>> env.constants["Int.add"].value is not None
+    True
+    >>> env.constants["Int.mul"].value is not None
+    True
+    """
+    _int_unop = mk_arrow(INT, INT)
+    _int_binop = mk_arrow(INT, mk_arrow(INT, INT))
+
+    env.add_constant(
+        ConstantInfo(name="Int.neg",
+                     level_params=(),
+                     type=_int_unop,
+                     value=mk_int_neg_value()))
+    env.add_constant(
+        ConstantInfo(name="Int.subNatNat",
+                     level_params=(),
+                     type=mk_arrow(NAT, mk_arrow(NAT, INT)),
+                     value=mk_int_subnatnat_value()))
+    env.add_constant(
+        ConstantInfo(name="Int.add",
+                     level_params=(),
+                     type=_int_binop,
+                     value=mk_int_add_value()))
+    env.add_constant(
+        ConstantInfo(name="Int.sub",
+                     level_params=(),
+                     type=_int_binop,
+                     value=mk_int_sub_value()))
+    env.add_constant(
+        ConstantInfo(name="Int.mul",
+                     level_params=(),
+                     type=_int_binop,
+                     value=mk_int_mul_value()))
 
 
 def mk_bool_decl() -> InductiveDecl:
@@ -1247,7 +2013,6 @@ def reg_ofnat(env: Environment) -> None:
     >>> from physika.core.inductive import mk_builtin_env
     >>> from physika.core.expr import App, Const, Proj, Lit
     >>> from physika.core.reduction import whnf
-    >>> from physika.core.local_context import LocalContext
     >>> from physika.core.metavar import MetaVarContext
     >>> env = mk_builtin_env()
     >>> term = Proj("OfNat", 0, App(Const("instOfNatNat", ()), Lit(3)))

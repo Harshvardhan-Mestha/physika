@@ -282,6 +282,8 @@ def mk_builtin_env() -> "Environment":
 
     Reducible definitions:
       Nat.add, Nat.mul, Nat.sub, Nat.pred — Nat arithmetic
+      Int.add, Int.sub, Int.mul, Int.neg, Int.subNatNat — Int arithmetic
+      DimVec, dim.one, dim_mul, dim_div, dim_pow — SI dimensional analysis
       instOfNatNat — numeral elaboration for Nat
 
     Axiom constants:
@@ -328,6 +330,8 @@ def mk_builtin_env() -> "Environment":
         mk_vec_decl,
         mk_prod_decl,
         reg_nat_ops,
+        reg_int_ops,
+        reg_dim_ops,
         reg_real_ops,
         reg_autodiff,
         reg_ofnat,
@@ -374,6 +378,8 @@ def mk_builtin_env() -> "Environment":
 
     # Inductive types operators
     reg_nat_ops(env)
+    reg_int_ops(env)
+    reg_dim_ops(env)
     reg_real_ops(env)
     reg_autodiff(env)
     reg_ofnat(env)

@@ -348,6 +348,64 @@ To briefly summarize, elaboration converts an AST into CIC terms for each functi
 statement, and class. Once everything is elaborated, the trusted kernel independently type-checks the whole
 program using WHNF and definitional equality as described previously.
 
+Dimensional analysis
+--------------------
+
+CIC allow to us to perform dimensional analysis in Physika, which can be seen a unit(type) checking
+by our trusted kernel. For instance, at compile time, ``force = mass * accel`` statement is checked to
+have units :math:`kg \cdot m \cdot s^{-2}` before the program runs, and an error is reported otherwise.
+
+Syntax
+~~~~~~
+
+A dimension is annotated to a type using the following syntax:
+
+``← [ … ]``
+
+A bracket holds a comma separated list of SI base units. An empty bracket
+represents an explicitly dimensionless quantity.
+
+.. code-block:: text
+
+   mass:  ℝ ← [kg]  = 5.0
+   accel: ℝ ← [m, s**-2] = 2.0
+   force: ℝ ← [kg, m, s**-2] = mass * accel  # checks: kg · (m·s⁻²)
+
+   def speed(d: ℝ ← [m], t: ℝ ← [s]): ℝ ← [m, s**-1]:
+       return d / t
+
+
+Representation
+~~~~~~~~~~~~~~
+
+The parser converts a dimension declaration statement into a ``unit_decl`` node
+that contains the unit as a list of ``(base, exponent)`` pairs (``[]`` for
+dimensionless):
+
+.. code-block:: text
+
+   ("unit_decl", "force", "ℝ", [("kg", 1), ("m", 1), ("s", -2)], ("num", 10.0), 3)
+
+This list is normalised to a ``Unit`` which is a dictionary mapping each SI
+unit to its integer exponent, e.g. ``{"kg": 1, "m": 1, "s": -2}``.
+
+Each ``Unit`` is elaborated into a CIC term of type ``DimVec``,
+which is defined as ``Vec Int 7`` (``Int`` so exponents can be negative).
+The units above becomes the vector literal ``[1, 1, -2, 0, 0, 0, 0]``.
+Physika's CIC trusted kernel apply inductive and recursor rules for performing
+unit artihmetic operations.
+
+
+The seven SI supported units, in the order of dimension vector (DimVec),
+are ``kg, m, s, A, K, mol, cd``.
+
+Checking
+~~~~~~~~
+
+For each dimensioned declaration (``unit_decl``), a ``DimVec`` is inferred for the
+right hand side by walking the expression and emitting the matching
+``dim_mul`` / ``dim_div`` / ``dim_pow`` application. Then, the kernel
+checks definitionalequality between the inferred and declared type.
 
 Physika implementation
 ----------------------

@@ -96,11 +96,21 @@ def collect_dim_vars_ordered(
     seen = set()
     result = []
 
+    # strip ``ℝ ← [unit]`` from params
+    all_entries = [ts for _, ts in params]
+    if return_type is not None:
+        all_entries.append(return_type)
+    all_ts = []
+    for ts in all_entries:
+        while isinstance(ts, tuple) and ts and ts[0] == "unit_typed":
+            ts = ts[1]
+        all_ts.append(ts)
+
     explicit_nat_param_names = {
         pname
-        for pname, ts in params if ts in ("ℕ", "ℤ")
+        for (pname, _), bts in zip(params, all_ts) if bts in ("ℕ", "ℤ")
     }
-    for ts in [ts for (_, ts) in params] + [return_type]:
+    for ts in all_ts:
         if isinstance(ts, tuple) and ts[0] == "tensor":
             for (d, _) in ts[1]:
                 for name in dim_leaf_names(d):
@@ -375,6 +385,9 @@ def typespec_to_cic_resolved(ts: Union[str, tuple],
     ...                          lambda name: {"n": BVar(0)}.get(name))
     App(func=App(func=Const(name='Vec', levels=()), arg=Const(name='Real', levels=())), arg=BVar(idx=0))
     """
+    # Elaboration of ``ℝ ← [kg]`` annotation
+    while isinstance(ts, tuple) and ts and ts[0] == "unit_typed":
+        ts = ts[1]
     if ts == "ℝ":
         return _REAL_CONST
     if ts in ("ℕ", "ℤ"):

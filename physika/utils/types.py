@@ -919,6 +919,9 @@ def check_statement(
 
     if stmt is None:
         return
+    if isinstance(stmt, tuple) and stmt and stmt[0] == "unit_decl":
+        # HM type checking fallback for dimensional units
+        stmt = ("decl", stmt[1], stmt[2], stmt[4], stmt[5])
     line = stmt[-1] if len(stmt) > 1 and isinstance(stmt[-1], int) else None
 
     prefix_line_msg = f"Line {line}: " if line is not None else ""
