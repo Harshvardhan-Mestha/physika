@@ -18,6 +18,7 @@ from physika.utils.cic_utils.inductive_utils import (
 )
 from physika.units import (
     check_unit_decl_cic,
+    dim_analysis,
     local_annotation,
     param_dim_spec,
     parse_unit_ast,
@@ -69,6 +70,20 @@ def elab_cic(src):
         check_func_dims(fname, fdef, elab.state.env, errs.append, func_dims)
     res["errors"] = errs
     return res
+
+
+def elab_program(src):
+    """
+    Helper function to parse and elaborate a physika file (src) and return
+    ``(unified_ast, cic_env)`` for running dimensional analysis.
+    """
+    symbol_table.clear()
+    lexer.lexer.lineno = 1
+    nodes = parser.parse(src, lexer=lexer)
+    u = build_unified_ast([s for s in nodes], symbol_table)
+    elab = Elab(mk_builtin_env())
+    elab.elaborate(u)
+    return u, elab.state.env
 
 
 class TestUnitAlgebra:
@@ -551,3 +566,65 @@ class TestCustomDimension:
         assert res.get(
             "errors"
         )[0] == "In function 'bad': return declares dimension [eV] but the body has dimension [eV·s]."  # noqa: E501
+
+
+class TestDimAnalysis:
+    """
+    ``dim_analysis`` over a unified AST.
+    """
+
+    def test_dimensionless_program(self):
+        """
+        A program with no unit annotation returns no errors.
+        """
+        u, e = elab_program("x: ℝ = 1.0\ny: ℝ = x + 2.0\n")
+
+        assert dim_analysis(u, e, {}) == []
+
+    def test_ast_wrong_unit_decl(self):
+        """
+        ``force`` matches ``kg·(m·s⁻²)`` and passes while ``wrong`` declares
+        ``[s]`` for the same product should report an error.
+        """
+        ast = {
+            "functions": {},
+            "program":
+            [("unit_decl", "mass", "ℝ", [("kg", 1)], ("num", 5.0), 1),
+             ("unit_decl", "accel", "ℝ", [("m", 1),
+                                          ("s", -2)], ("num", 2.0), 2),
+             ("unit_decl", "force", "ℝ", [("kg", 1), ("m", 1), ("s", -2)],
+              ("mul", ("var", "mass"), ("var", "accel")), 3),
+             ("unit_decl", "wrong", "ℝ", [("s", 1)], ("mul", ("var", "mass"),
+                                                      ("var", "accel")), 4)]
+        }
+        errs = dim_analysis(ast, mk_builtin_env(), {})
+
+        assert len(errs) == 1
+        assert errs[
+            0] == "Line 4: unit mismatch for 'wrong': declared [s] but expression has unit [kg·m·s⁻²]."  # noqa: E501
+
+    def test_func_sigs_dimension_annotated_function(self):
+        """
+        A CIC elaborated fucntion records ``(param specs, return unit)`` in
+        ``func_sigs``.
+        """
+        u, e = elab_program(
+            "def speed(d: ℝ ← [m], t: ℝ ← [s]): ℝ ← [m, s**-1]:\n"
+            "    return d / t\n")
+        func_sigs: dict = {}
+
+        assert dim_analysis(u, e, func_sigs) == []
+        assert func_sigs["speed"] == ([{"m": 1}, {"s": 1}], {"m": 1, "s": -1})
+
+    def test_wrong_function_return_dimension_is_reported(self):
+        """
+        Declaring ``ℝ ← [m, s]`` for a body that computes ``m·s⁻¹`` is reported
+        as an error message.
+        """
+        u, e = elab_program("def speed(d: ℝ ← [m], t: ℝ ← [s]): ℝ ← [m, s]:\n"
+                            "    return d / t\n")
+        errs = dim_analysis(u, e, {})
+
+        assert len(errs) == 1
+        assert errs[
+            0] == "In function 'speed': return declares dimension [m·s] but the body has dimension [m·s⁻¹]."  # noqa: E501

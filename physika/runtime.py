@@ -13,7 +13,7 @@ import builtins
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def print(value: Any) -> None:
+def print(value: Any, unit_str: str = "") -> None:
     """Pretty-print a Physika value with its inferred type annotation.
 
     Converts PyTorch tensors, complex numbers, and Python scalars into a
@@ -26,6 +26,9 @@ def print(value: Any) -> None:
         The value to print.  Supported types include ``torch.Tensor``,
         ``int``, ``float``, ``complex``, ``list`` (nested), and
         ``nn.Module`` subclasses.
+    unit_str : str, default ""
+        Display for dimensional unit (e.g. ``"kg·m·s⁻²"``), computed before
+        runtime from the declared or inferred unit.
 
     Examples
     --------
@@ -35,6 +38,8 @@ def print(value: Any) -> None:
     [1.0, 2.0, 3.0] ∈ ℝ[3]
     >>> print(torch.tensor([[1.0, 2.0], [3.0, 4.0]]))
     [[1.0, 2.0], [3.0, 4.0]] ∈ ℝ[2,2]
+    >>> print(10.0, unit_str="kg·m·s⁻²")
+    10.0 kg·m·s⁻² ∈ ℝ
     """
     # avoid printing NoneType in terminal when value is None
     # (for example void methods)
@@ -42,7 +47,8 @@ def print(value: Any) -> None:
         return
     display = _from_torch(value)
     type_str = _infer_type(value)
-    builtins.print(f"{display} ∈ {type_str}")
+    unit_suffix = f" {unit_str}" if unit_str else ""
+    builtins.print(f"{display}{unit_suffix} ∈ {type_str}")
 
 
 def solve(*equations: str, **known_vars: float) -> tuple[torch.Tensor, ...]:

@@ -12,6 +12,7 @@ import os
 import pytest
 from physika.core.elab.elab import Elab
 from physika.core.inductive import mk_builtin_env
+from physika.units import dim_analysis
 
 HEADER = "import torch\nimport torch.nn as nn\nimport torch.optim as optim\n"
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
@@ -83,6 +84,8 @@ def test_codegen_matches_reference(phyk_file):
     )
     cic_elab = Elab(mk_builtin_env())
     cic_result = cic_elab.elaborate(unified_ast)
+    func_sigs: dict = {}
+    dim_analysis(unified_ast, cic_elab.state.env, func_sigs)
     code_phyk = from_ast_to_torch(
         unified_ast,
         print_code=False,
@@ -92,6 +95,7 @@ def test_codegen_matches_reference(phyk_file):
         resolved_program_fvar_names=cic_result.get(
             "resolved_program_fvar_names"),
         cic_env=cic_elab.state.env,
+        func_sigs=func_sigs,
     )
     code_torch = (TORCH_CODE_DIR / f"{phyk_file.stem}.py").read_text()
 

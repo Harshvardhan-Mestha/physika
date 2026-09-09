@@ -1133,3 +1133,77 @@ def check_func_dims(
     add_error(f"In function '{name}': return declares dimension "
               f"[{unit_to_str(ret_spec or {})}] but the body has dimension "
               f"[{got_str}].")
+
+
+def dim_analysis(unified_ast: Dict[str, Any], cic_env: Environment,
+                 func_sigs: Dict[str, Any]) -> List[str]:
+    """
+    Run dimensional analysis pass from a parsed AST.
+
+    Physika kernel checks unit declaration statemts ``x : ℝ ← [unit] = expr``
+    and each function that contain dimensional units. If there are no type
+    annotations for units, the the program is condered dimensionless and runs
+    without checking dimensional analysis.
+
+    Parameters
+    ----------
+    unified_ast : dict
+        Unified AST parsed from source code.
+    cic_env : Environment
+        CIC environment the program was already elaborated.
+    func_sigs : dict
+        Function name to ``(param specs, return unit)`` filled as dimensional
+        units are resolved.
+
+    Examples
+    --------
+    >>> from physika.units import dim_analysis  # noqa: E501
+    >>> from physika.core.inductive import mk_builtin_env
+    >>> ast = {"functions": {}, "program": [
+    ...     ("unit_decl", "mass", "ℝ", [("kg", 1)], ("num", 5.0), 1),
+    ...     ("unit_decl", "accel", "ℝ", [("m", 1), ("s", -2)],
+    ...      ("num", 2.0), 2),
+    ...     ("unit_decl", "force", "ℝ", [("kg", 1), ("m", 1), ("s", -2)],
+    ...      ("mul", ("var", "mass"), ("var", "accel")), 3),
+    ...     ("unit_decl", "wrong", "ℝ", [("s", 1)],
+    ...      ("mul", ("var", "mass"), ("var", "accel")), 4)]}
+    >>> errs = dim_analysis(ast, mk_builtin_env(), {})
+    >>> len(errs)
+    1
+    >>> errs[0]
+    "Line 4: unit mismatch for 'wrong': declared [s] but expression has unit [kg·m·s⁻²]."
+    """
+    funcs = unified_ast.get("functions", {})
+    program = unified_ast.get("program", [])
+
+    has_units = (
+        # a parameter carries a unit annotation
+        any(
+            isinstance(ts, tuple) and ts and ts[0] == "unit_typed"
+            for fd in funcs.values() for _, ts in fd.get("params", []))
+        # a return type carries a unit annotation
+        or any(
+            isinstance(fd.get("return_type"), tuple)
+            and fd["return_type"][0] == "unit_typed" for fd in funcs.values())
+        # a top-level unit declaration exists
+        or any(
+            isinstance(s, tuple) and s and s[0] == "unit_decl"
+            for s in program))
+    if not has_units:
+        return []
+
+    errors: List[str] = []
+    func_dims: Dict[str, Expr] = {}
+    for fname, fdef in funcs.items():
+        check_func_dims(fname, fdef, cic_env, errors.append, func_dims,
+                        func_sigs)
+
+    unit_env: Dict[str, Unit] = {}
+    unit_cic_env: Dict[str, Expr] = {}
+    for stmt in program:
+        if isinstance(stmt, tuple) and stmt and stmt[0] == "unit_decl":
+            check_unit_decl_cic(stmt, unit_env, unit_cic_env, cic_env,
+                                errors.append)
+        update_unit_env(stmt, unit_env, func_sigs)
+        update_unit_cic_env(stmt, unit_cic_env, cic_env)
+    return errors
