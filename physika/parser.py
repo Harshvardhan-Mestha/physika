@@ -77,6 +77,28 @@ def p_type_tensor(p):
     p[0] = ("tensor", p[3])
 
 
+def p_type_with_unit(p):
+    """type_spec : type_spec LARROW LBRACKET unit_list RBRACKET"""
+    # A type annotated with a dimensional (SI) unit:
+    #   ℝ ← [kg]
+    # Parameters:
+    #   p[1] - base type spec (e.g. "ℝ", "ℝ[m, n]", etc.)
+    #   p[4] - List of units
+    # Returns:
+    #   ("unit_typed", base_type_spec, unit_ast)
+    p[0] = ("unit_typed", p[1], p[4])
+
+
+def p_type_with_unit_dimensionless(p):
+    """type_spec : type_spec LARROW LBRACKET RBRACKET"""
+    # An dimensionless value:
+    #   ℝ ← []
+    # For wrriting programs with dimensionless values.
+    # Parameters:
+    #   p[1] - base type spec (e.g. "ℝ", "ℝ[m, n]", etc.)
+    p[0] = ("unit_typed", p[1], [])
+
+
 def p_dimension_list_single(p):
     """dimension_list : dimension_spec"""
     p[0] = [p[1]]
@@ -818,9 +840,78 @@ def p_statement_decl(p):
     type_spec = p[3]
     expr_ast = p[5]  # This is now an AST, not an evaluated value
 
+    if isinstance(type_spec, tuple) and type_spec[0] == "unit_typed":
+        # Dimensional declaration:
+        # x : T ← [unit] = expr
+        base_type, unit_ast = type_spec[1], type_spec[2]
+        p[0] = ("unit_decl", name, base_type, unit_ast, expr_ast, p.lineno(1))
+        return
+
     # Return AST node for declaration (evaluation happens later)
     # Include line number for error reporting
     p[0] = ("decl", name, type_spec, expr_ast, p.lineno(1))
+
+
+def p_unit_list_single(p):
+    """unit_list : unit_term"""
+    # Unit list inside a dim decl ``← [...]``
+    # Example:
+    #   [kg]
+    # Parameters:
+    #   p[1] - one ("base", exponent) pair
+    # Returns:
+    #   [("kg", 1)]
+    p[0] = [p[1]]
+
+
+def p_unit_list_multi(p):
+    """unit_list : unit_list COMMA unit_term"""
+    # Left recursive accumulation of comma separated unit terms.
+    #   [m, kg, s**-2]   (i.e. m · kg · s⁻²)
+    # Parameters:
+    #   p[1] - unit list parsed starting from left.
+    #   p[3] - next ("base", exponent) pair to append
+    # Returns:
+    #   [("m", 1), ("kg", 1), ("s", -2)]
+    p[0] = p[1] + [p[3]]
+
+
+def p_unit_term_base(p):
+    """unit_term : ID"""
+    # Base unit (exponent value is 1).
+    # Example:
+    #   [kg]
+    # Parameters:
+    #   p[1] - Unit name
+    # Returns:
+    #   ("kg", 1)
+    p[0] = (p[1], 1)
+
+
+def p_unit_term_pow(p):
+    """unit_term : ID POWER NUMBER"""
+    # Base unit with an explicit positive integer power.
+    # Example:
+    #   m**2
+    # Parameters:
+    #   p[1] - Unit name
+    #   p[3] - Integer exponent
+    # Returns:
+    #   ("m", 2)
+    p[0] = (p[1], int(p[3]))
+
+
+def p_unit_term_pow_neg(p):
+    """unit_term : ID POWER MINUS NUMBER"""
+    # Base unit with an explicit negative integer power.
+    # Example:
+    #   s**-2
+    # Parameters:
+    #   p[1] - the unit name
+    #   p[4] - the exponent magnitude (NUMBER token, coerced to int)
+    # Returns:
+    #   ("s", -2)
+    p[0] = (p[1], -int(p[4]))
 
 
 def p_statement_assign(p):
@@ -1260,20 +1351,48 @@ def p_term_binop(p):
     """term : term TIMES factor
             | term DIVIDE factor
             | term MATMUL factor
-            | term POWER factor"""
+            | term TIMES pow_expr
+            | term DIVIDE pow_expr
+            | term MATMUL pow_expr"""
+    # Binary operations using ``*``, ``/``, ``@`` symbols.
+    # If the there is an exponentiation in the right term, it is parsed with
+    # ``pow_expr``.
+    # Example:
+    #   a * b / c   ->   (a * b) / c
+    # Parameters:
+    # p[1] - left term
+    # p[2] - operator token ("*", "/" or "@")
+    # p[3] - right factor or pow_expr
+    # Returns:
+    #   ("mul" | "div" | "matmul", left, right)
     if p[2] == "*":
         p[0] = ("mul", p[1], p[3])
     elif p[2] == "/":
         p[0] = ("div", p[1], p[3])
-    elif p[2] == "**":
-        p[0] = ("pow", p[1], p[3])
     else:  # @
         p[0] = ("matmul", p[1], p[3])
 
 
+def p_pow_expr(p):
+    """pow_expr : factor POWER factor
+                | factor POWER pow_expr"""
+    # Exponentiation operation (right associative).
+    # Example:
+    #   4 * a ** 2       ->   4 * (a ** 2)
+    #   2 ** 3 ** 2      ->   2 ** (3 ** 2)
+    # Parameters:
+    # p[1] - base factor
+    # p[3] - exponent or a pow_expr for a right nested chain
+    # Returns:
+    #   ("pow", base, exponent)
+    p[0] = ("pow", p[1], p[3])
+
+
 # Factors
 def p_term_factor(p):
-    """term : factor"""
+    """term : factor
+            | pow_expr"""
+    # A term that is a factor or a pow_expr. No new AST node is created.
     p[0] = p[1]
 
 
