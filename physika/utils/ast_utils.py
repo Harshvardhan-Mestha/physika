@@ -4,6 +4,7 @@ import re
 from typing import Any, Callable, Collection, Literal, Union, cast, Optional
 from physika.utils.print_utils import print_unified_ast
 from physika.elf import REGISTRY
+from physika.units import infer_unit, unit_to_str, UnitError
 # AST TYPE DEFINITIONS
 # The parser produces a tree of tagged tuples.  Every non-leaf node is a
 # tuple whose first element is a string (tag) and whose remaining elements are
@@ -1370,6 +1371,10 @@ def generate_function(
         if dim_vars:
             bound_dim_vars: set[str] = set()
             for pname, ptype in params:
+                # unit declaration for tensors
+                if (isinstance(ptype, tuple) and ptype
+                        and ptype[0] == "unit_typed"):
+                    ptype = ptype[1]
                 if not (isinstance(ptype, tuple) and ptype
                         and ptype[0] == "tensor"):
                     continue
@@ -1588,14 +1593,16 @@ def emit_for_stmts(
 
 def generate_statement(stmt: ASTNode,
                        grad_target_vars: set[str],
-                       resolved_expr_code: str | None = None) -> str | None:
+                       resolved_expr_code: str | None = None,
+                       unit_env: dict | None = None,
+                       func_sigs: dict | None = None) -> str | None:
     """Generate a PyTorch code string for a program-level statement.
 
-    Handles ``decl`` (variable declaration), ``assign`` (reassignment),
-    ``expr`` (bare expression — wrapped in ``print`` unless it
-    is a side-effect call like ``simulate``/``animate``), ``for_loop``,
-    and skips ``func_def``/``class_def`` (already emitted by
-    ``from_ast_to_torch``).
+    Handles ``decl`` (variable declaration), ``unit_decl`` (for dimensional
+    analysis), ``assign`` (reassignment), ``expr`` (bare expression —
+    wrapped in ``print`` unless it is a side-effect call like ``simulate``
+    /``animate``), ``for_loop``, and skips ``func_def``/``class_def``
+    (already emitted by ``from_ast_to_torch``).
 
     Variables whose names appear in *grad_target_vars* are initialised
     with ``requires_grad=True`` so that ``grad()`` can differentiate
@@ -1612,6 +1619,10 @@ def generate_statement(stmt: ASTNode,
         analysis pass.
     resolved_expr_code : Optional[str]
         CIC elaborated and verified statement expression.
+    unit_env : dict
+        Unit environment mapping variabl names to AST unit exprssions
+    func_sigs : dict
+        Function name to ``(param units, return units)`` mapping.
 
     Returns
     -------
@@ -1634,6 +1645,11 @@ def generate_statement(stmt: ASTNode,
         return None
 
     op = stmt[0]
+
+    if op == "unit_decl":
+        # handle unit declarations as variable declarations
+        stmt = ("decl", stmt[1], stmt[2], stmt[4], stmt[5])
+        op = "decl"
 
     if op == "decl":
         name = stmt[1]
@@ -1690,6 +1706,14 @@ def generate_statement(stmt: ASTNode,
                       tuple) and expr[0] == "call" and expr[1] in ("simulate",
                                                                    "animate"):
             return expr_code
+        if unit_env or func_sigs:
+            try:
+                unit = infer_unit(expr, unit_env or {}, func_sigs)
+            except UnitError:
+                unit = None
+            if unit:
+                return (f"print({expr_code}, "
+                        f"unit_str={unit_to_str(unit)!r})")
         return f"print({expr_code})"
 
     elif op == "symbol_decl":

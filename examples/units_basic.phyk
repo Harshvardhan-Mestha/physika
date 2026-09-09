@@ -1,0 +1,39 @@
+# Examples for using Physika dimensional analysis.
+# CIC does a full elaboration an kernel verification of SI units.
+# These are meter (m), kilogram (kg), second (s), Ampere (A), Kelvin (K), mole (mol), and
+# candela (cd).
+# Physika CIC also support dimensional analysis for custom units (outside SI), for example
+# electronvolt (eV). However these are added as opaque axioms and do not elaborate with
+# recursive rules.
+
+# Example #1
+# Deriving force units following Newton's law from mass and acceleration.
+m: ℝ ← [kg] = 5.0
+a: ℝ ← [m, s**-2] = 2.0
+
+F : ℝ ← [m, kg, s**-2] = m * a
+F
+
+# An error should be reported
+F_bad_typed : ℝ ← [m, s**-2] = m * a
+F_bad_typed
+
+# Example #2
+# Deriving time units from d = v * t equation
+v: ℝ ← [m, s**-1] = 3.0
+d : ℝ ← [m] = 9.0
+t = d/v
+t
+d
+v
+
+# Example #3
+# Multiple dimension operations to show how output carries the correct dimension exponents.
+# This operation does not carry any physical meaning.
+temp: ℝ ← [K] = 100.0
+F * v * t * F* temp
+
+# Note: Physika allows redeclaration of variables with no dimenisonal units.
+# Redeclare F with no units dims
+F: ℝ = 3.0
+F
