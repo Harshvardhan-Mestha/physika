@@ -1351,48 +1351,31 @@ def p_term_binop(p):
     """term : term TIMES factor
             | term DIVIDE factor
             | term MATMUL factor
-            | term TIMES pow_expr
-            | term DIVIDE pow_expr
-            | term MATMUL pow_expr"""
-    # Binary operations using ``*``, ``/``, ``@`` symbols.
-    # If the there is an exponentiation in the right term, it is parsed with
-    # ``pow_expr``.
+            | term POWER factor"""
+    # Binary operations using ``*``, ``/``, ``@`` and ``**`` symbols, all
+    # left-associative at the same precedence level.
     # Example:
     #   a * b / c   ->   (a * b) / c
     # Parameters:
-    # p[1] - left term
-    # p[2] - operator token ("*", "/" or "@")
-    # p[3] - right factor or pow_expr
+    #   p[1] - left term
+    #   p[2] - operator token ("*", "/", "@" or "**")
+    #   p[3] - right factor
     # Returns:
-    #   ("mul" | "div" | "matmul", left, right)
+    #   ("mul" | "div" | "matmul" | "pow", left, right)
     if p[2] == "*":
         p[0] = ("mul", p[1], p[3])
     elif p[2] == "/":
         p[0] = ("div", p[1], p[3])
+    elif p[2] == "**":
+        p[0] = ("pow", p[1], p[3])
     else:  # @
         p[0] = ("matmul", p[1], p[3])
 
 
-def p_pow_expr(p):
-    """pow_expr : factor POWER factor
-                | factor POWER pow_expr"""
-    # Exponentiation operation (right associative).
-    # Example:
-    #   4 * a ** 2       ->   4 * (a ** 2)
-    #   2 ** 3 ** 2      ->   2 ** (3 ** 2)
-    # Parameters:
-    # p[1] - base factor
-    # p[3] - exponent or a pow_expr for a right nested chain
-    # Returns:
-    #   ("pow", base, exponent)
-    p[0] = ("pow", p[1], p[3])
-
-
 # Factors
 def p_term_factor(p):
-    """term : factor
-            | pow_expr"""
-    # A term that is a factor or a pow_expr. No new AST node is created.
+    """term : factor"""
+    # A term that is a single factor. No new AST node is created.
     p[0] = p[1]
 
 
