@@ -25,7 +25,7 @@ def print_type_check_results(type_errors: list[str]) -> None:
     --------
     >>> from physika.utils.print_utils import print_type_check_results
     >>> print_type_check_results([])
-      ✓ No type errors found
+    ✓ No type errors found
     """
     if type_errors:
         print("Type errors found:")
@@ -35,7 +35,7 @@ def print_type_check_results(type_errors: list[str]) -> None:
 
         sys.exit(1)
     else:
-        print("  ✓ No type errors found")
+        print("✓ No type errors found")
 
 
 def print_cic_check_results(cic_errors: list[str]) -> None:

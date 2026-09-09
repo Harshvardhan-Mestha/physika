@@ -240,6 +240,9 @@ def emit_method(
     if resolved is not None and dim_vars:
         bound_dim_vars = set()
         for pname, ptype in params:
+            if (isinstance(ptype, tuple) and ptype
+                    and ptype[0] == "unit_typed"):
+                ptype = ptype[1]
             if not (isinstance(ptype, tuple) and ptype
                     and ptype[0] == "tensor"):
                 continue

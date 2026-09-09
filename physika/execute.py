@@ -12,6 +12,7 @@ from physika.utils.import_manager import resolve_imports
 
 from physika.core.elab.elab import Elab
 from physika.core.inductive import mk_builtin_env
+from physika.units import dim_analysis
 
 
 def main():
@@ -33,6 +34,7 @@ def main():
     cic_elab = Elab(mk_builtin_env())
 
     unified_ast = None
+    func_sigs: dict = {}  # name keys, (param units, return units) values
     if physika_nodes:
         unified_ast = build_unified_ast(physika_nodes,
                                         symbol_table,
@@ -45,6 +47,21 @@ def main():
         resolved_functions = set(cic_result.get("resolved_bodies") or {})
         resolved_methods = set(cic_result.get("resolved_methods") or {})
 
+        # Dimensional analysis check
+        unit_errors = dim_analysis(unified_ast, cic_elab.state.env, func_sigs)
+
+        if unit_errors:
+            print(f"{len(unit_errors)} dimensional analysis error(s) found.")
+            for e in unit_errors:
+                print(f"  ✗ {e}")
+
+        if cic_errors:
+            print(f"(CIC: {len(cic_errors)} construct(s) not fully verified "
+                  "yet; switching to HM type checking and standard codegen "
+                  "for those)")
+            for e in cic_errors:
+                print(f"    - {e}")
+
         # 2. Fall back to the Hindley-Milner for terms that failed elaboration.
         type_status = TypeChecker(
             unified_ast,
@@ -52,13 +69,6 @@ def main():
             skip_methods=resolved_methods,
         ).run()
         print_type_check_results(type_status)
-
-        if cic_errors:
-            print(f"  (CIC: {len(cic_errors)} construct(s) not fully verified "
-                  "yet; switching to HM type checking and standard codegen "
-                  "for those)")
-            for e in cic_errors:
-                print(f"    - {e}")
 
     if not physika_nodes:
         return
@@ -72,6 +82,7 @@ def main():
         resolved_program_fvar_names=cic_result.get(
             "resolved_program_fvar_names"),
         cic_env=cic_elab.state.env,
+        func_sigs=func_sigs,
     )
     exec(generated_code, vars(physika.runtime))
 

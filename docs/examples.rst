@@ -77,6 +77,11 @@ Dependent types
 .. literalinclude:: ../examples/dep_types.phyk
    :language: text
 
+Dimensional analysis
+~~~~~~~~~~~~~~~~~~~~
+.. literalinclude:: ../examples/units_basic.phyk
+   :language: text
+
 Lists
 ~~~~~
 

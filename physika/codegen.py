@@ -8,6 +8,7 @@ from physika.utils.ast_utils import (ast_uses_solve, ast_uses_func,
                                      ast_to_torch_expr)
 from physika.features.classes import generate_class
 from physika.elf import REGISTRY
+from physika.units import update_unit_env
 
 # fallback to ast codegen
 AST_CODEGEN_STMT_TAGS = ("body_for", "body_for_range", "body_for_accum",
@@ -21,7 +22,8 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
                       resolved_program: Optional[Dict[int, Any]] = None,
                       resolved_program_fvar_names: Optional[Dict[FVarId,
                                                                  str]] = None,
-                      cic_env: Optional[Environment] = None) -> str:
+                      cic_env: Optional[Environment] = None,
+                      func_sigs: Optional[Dict[str, Any]] = None) -> str:
     """Convert a unified AST into a complete, executable Python/PyTorch
     source string.
 
@@ -71,6 +73,8 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
     cic_env : Any, optional
         ``Environment`` used during elaboration used to lower the resolved CIC
         terms.
+    func_sigs : Dict[str, Any], optional
+        Function name to ``(param units, return units)`` mapping.
 
     Returns
     -------
@@ -297,6 +301,8 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
 
     # Generate program statements
     code_lines.append("# === Program ===")
+
+    unit_env: Dict[str, Any] = {}
     for idx, stmt in enumerate(unified_ast["program"]):
         resolved_expr_code = None
         # lookup if there are any CIC elaborated terms from top level program
@@ -319,9 +325,12 @@ def from_ast_to_torch(unified_ast: Dict[str, Any],
         # else follows regular codegen
         stmt_code = generate_statement(stmt,
                                        grad_target_vars,
-                                       resolved_expr_code=resolved_expr_code)
+                                       resolved_expr_code=resolved_expr_code,
+                                       unit_env=unit_env,
+                                       func_sigs=func_sigs)
         if stmt_code:
             code_lines.append(stmt_code)
+        update_unit_env(stmt, unit_env, func_sigs)
 
     # Join all code
     generated_code = "\n".join(code_lines)
