@@ -115,7 +115,7 @@ recon_before: ℝ[1,784] = deq(x0)
 loss_before: ℝ = deq.loss(x0, recon_before)
 print(loss_before)
 
-epochs: ℕ = 20
+epochs: ℕ = 1
 lr: ℝ = 0.001
 deq.train(X, epochs, lr, images)
 recon_after: ℝ[1,784] = deq(x0)
