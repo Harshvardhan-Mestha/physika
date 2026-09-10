@@ -23,7 +23,7 @@ Leonhard Euler's work on the Seven Bridges of Königsberg in 1736. [Euler1736]_
 Design
 ------
 
-Physika has no ``dict`` and no growable container, and its values are
+Physika has no ``dictionary`` and no growable container, and its values are
 immutable, so the design differs from the Python in three ways:
 
 - The adjacency structure is a fixed-size matrix, ``adjacency: ℝ[n, n]``,
@@ -88,20 +88,40 @@ The UndirectedGraph class
         def add_vertex(new_n: ℕ):
             this.adjacency = this.grow_adjacency(new_n)
 
-``add_weighted_edge`` copies the matrix and sets two entries to the weight
-``w``, so its shape ``ℝ[n, n]`` is unchanged. ``w`` can be a similarity in a
-nearest-neighbour graph, a capacity or distance in a transport network, a
-contact rate in an epidemic model, or an attention coefficient in a GNN.
-``add_edge(u, v)`` is a shortcut for the unweighted case
-``add_weighted_edge(u, v, 1.0)``.
+Function summary
+----------------
 
-``add_vertex`` cannot copy-and-edit in place: it needs a
-bigger matrix, so it calls ``grow_adjacency``, whose ``new_n`` is bound as
-its own ``ℕ`` parameter and reused in the return type ``ℝ[new_n, new_n]`` --
-the only way Physika lets a method's output shape differ from ``this``'s.
-The old matrix is copied into the top-left block; the new row and column
-are left zero, i.e. the new vertex starts isolated.
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
 
+   * - Function
+     - Description
+   * - ``num_vertices()``
+     - Returns the number of vertices, read off as the row count of the adjacency matrix.
+   * - ``has_edge(u, v)``
+     - Returns ``1.0`` if an edge connects ``u`` and ``v``, otherwise ``0.0``.
+   * - ``degree(u)``
+     - Returns the degree of ``u`` by summing its row of the adjacency matrix (the weighted degree when edges carry weights).
+   * - ``sq_degree_sum(s)``
+     - Returns :math:`\sum_i (s\,\deg(i))^2`. Scaled sum of squared degrees. 
+   * - ``neighbors(u)``
+     - Returns row ``u`` of the adjacency matrix, the indicator vector of ``u``'s neighbors.
+   * - ``add_weighted_edge(u, v, w)``
+     - Copies the matrix, sets entries ``[u, v]`` and ``[v, u]`` to ``w``, and stores the new matrix. The weight can represent similarity, capacity or distance.
+   * - ``add_edge(u, v)``
+     - ``add_edge(u, v)`` is a shortcut for the unweighted case, using ``add_weighted_edge(u, v, 1.0)``.
+   * - ``grow_adjacency(new_n)``
+     - Returns an ``new_n`` × ``new_n`` matrix with the old adjacency copied into the top-left block and the rest left zero.
+   * - ``add_vertex(new_n)``
+     - Replaces the adjacency with ``grow_adjacency(new_n)``, adding an isolated vertex.
+   * - ``empty_graph(n_vertices)``
+     - Builds an ``UndirectedGraph`` with ``n_vertices`` vertices and no edges.
+   * - ``get_sum_of_1d_array(x)``
+     - Returns the sum of the elements of a 1-D array.
+   * - ``get_2d_array_num_rows(x)``
+     - Returns the number of rows of a 2-D array.
+ 
 ``sq_degree_sum(s)`` sums the squared weighted degree of every vertex:
 
 .. math::
@@ -158,40 +178,6 @@ Helper Functions
             total += 1
         return total
 
-Function summary
-----------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
-
-   * - Function
-     - Description
-   * - ``num_vertices()``
-     - Returns the number of vertices, read off as the row count of the adjacency matrix.
-   * - ``has_edge(u, v)``
-     - Returns ``1.0`` if an edge connects ``u`` and ``v``, otherwise ``0.0``.
-   * - ``degree(u)``
-     - Returns the degree of ``u`` by summing its row of the adjacency matrix (the weighted degree when edges carry weights).
-   * - ``sq_degree_sum(s)``
-     - Returns :math:`\sum_i (s\,\deg(i))^2`. Scaled sum of squared degrees. 
-   * - ``neighbors(u)``
-     - Returns row ``u`` of the adjacency matrix, the indicator vector of ``u``'s neighbors.
-   * - ``add_weighted_edge(u, v, w)``
-     - Copies the matrix, sets entries ``[u, v]`` and ``[v, u]`` to ``w``, and stores the new matrix.
-   * - ``add_edge(u, v)``
-     - Adds an unweighted edge; calls ``add_weighted_edge(u, v, 1.0)``.
-   * - ``grow_adjacency(new_n)``
-     - Returns an ``new_n`` × ``new_n`` matrix with the old adjacency copied into the top-left block and the rest left zero.
-   * - ``add_vertex(new_n)``
-     - Replaces the adjacency with ``grow_adjacency(new_n)``, adding an isolated vertex.
-   * - ``empty_graph(n_vertices)``
-     - Builds an ``UndirectedGraph`` with ``n_vertices`` vertices and no edges.
-   * - ``get_sum_of_1d_array(x)``
-     - Returns the sum of the elements of a 1-D array.
-   * - ``get_2d_array_num_rows(x)``
-     - Returns the number of rows of a 2-D array.
-
 Example
 -------
 
@@ -231,26 +217,17 @@ degree ``1``.
 Differentiability
 -----------------
 
-Because the adjacency holds real weights, ``degree``, ``sq_degree_sum`` and
-``neighbors`` are ``sum`` / gather over that matrix and therefore smooth in
-the weights. Physika lowers the program to PyTorch, so ``grad`` gives the
-derivative of any such readout through ``torch.autograd``.
+Because the adjacency contain weights, ``degree``, ``sq_degree_sum`` and
+``neighbors`` are computed using ``sums`` or ``gather``. Making them
+differentiable or smooth with respect to weights.
 
-The derivative of a structural metric with respect to edge weights drives
-several standard workflows:
+The derivative are useful for:
 
-- **Network design and intervention.** Given a budget, adjust the edge
-  weights by gradient descent to reach a target -- raise a transport
-  network's throughput, drive the epidemic threshold
-  :math:`\langle k \rangle / \langle k^{2} \rangle` above the current
-  transmissibility, meet a degree-variance goal. The gradient ranks which
-  edges to strengthen or cut.
-- **Sensitivity analysis.** "If this contact rate were 5 % higher, how much
-  does the spreading risk move?" is the partial derivative of the metric
-  with respect to that weight.
-- **Graph-structure learning and GNNs.** When the weights are themselves
-  learned (attention, a learned similarity graph), training is gradient
-  descent on a loss whose graph-level terms are metrics like this one.
+- **Network design:** Using Gradient descent to reach a target, such as
+  increasing network's capacity, or contolling epidemic spread. The gradient
+  tell us which edsges have the most impact.
+- **Sensitivity analysis:** Measures how much a metric changes when an edge
+  weight changes.
 
 .. code-block:: text
 
