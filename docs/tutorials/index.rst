@@ -99,6 +99,7 @@ Tutorials
    fourier_neural_operator
    2d_pde_parameter_estimation
    norm_flow
+   undirected_graph
 
 .. toctree::
    :maxdepth: 1
