@@ -31,7 +31,6 @@ def empty_graph(n_vertices):
 class UndirectedGraph(nn.Module):
     def __init__(self, ):
         super().__init__()
-        self.learnable_params = []
         self.adjacency = None
 
     def num_vertices(self):
