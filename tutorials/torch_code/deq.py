@@ -169,7 +169,7 @@ x0 = torch.stack([torch.as_tensor(X[int(0)])])
 recon_before = deq(x0)
 loss_before = deq.loss(x0, recon_before)
 print(print(loss_before))
-epochs = 20
+epochs = 1
 lr = 0.001
 print(deq.train(X, epochs, lr, images))
 recon_after = deq(x0)
