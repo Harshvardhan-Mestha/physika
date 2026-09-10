@@ -12,7 +12,7 @@ def tanh(a):
     return (num / denom)
 
 def rand_array(n, m, μ):
-    return torch.stack([torch.stack([(μ * torch.distributions.Normal(0.0, 1.0).rsample()) for _fi_j in range(int(m)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    return torch.stack([torch.distributions.Normal(0.0, μ).rsample((int(m),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 
 def zeros2d(n, m):
     return torch.stack([torch.stack([(j * 0.0) for _fi_j in range(int(m)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
@@ -26,41 +26,39 @@ def eye(n):
         I[int(i), int(i)] = 1.0
     return I
 
-def df_dh(W, tanh_prime):
-    J = zeros2d(32, 32)
-    for c in range(int(0), int(32)):
-        for r in range(int(0), int(32)):
-            J[int(r), int(c)] = (W[int(r), int(c)] * tanh_prime[int(0), int(c)])
-    return J
+def df_dh(W, tanh_prime, n=None):
+    if n is None:
+        n = int(W.shape[0])
+    return torch.stack([torch.as_tensor(torch.stack([torch.as_tensor((W[int(r)][int(c)] * tanh_prime[int(0)][int(c)])) for c in range(int(n))]).float()) for r in range(int(n))])
 
 def linsolve(A, b):
-    aug = zeros2d(32, 33)
-    for i in range(int(0), int(32)):
-        for c in range(int(0), int(32)):
+    aug = zeros2d(16, 17)
+    for i in range(int(0), int(16)):
+        for c in range(int(0), int(16)):
             aug[int(i), int(c)] = A[int(i), int(c)]
-        aug[int(i), int(32)] = b[int(i)]
-    for i in range(int(0), int(32)):
-        piv = zeros1d(33)
-        for c in range(int(0), int(33)):
+        aug[int(i), int(16)] = b[int(i)]
+    for i in range(int(0), int(16)):
+        piv = zeros1d(17)
+        for c in range(int(0), int(17)):
             piv[int(c)] = aug[int(i), int(c)]
-        aug_next = zeros2d(32, 33)
-        for r in range(int(0), int(32)):
+        aug_next = zeros2d(16, 17)
+        for r in range(int(0), int(16)):
             if r == i:
-                for c in range(int(0), int(33)):
+                for c in range(int(0), int(17)):
                     aug_next[int(r), int(c)] = (piv[int(c)] / piv[int(i)])
             else:
                 fac = (aug[int(r), int(i)] / piv[int(i)])
-                for c in range(int(0), int(33)):
+                for c in range(int(0), int(17)):
                     aug_next[int(r), int(c)] = (aug[int(r), int(c)] - (fac * piv[int(c)]))
         aug = aug_next
-    x = zeros1d(32)
-    for i in range(int(0), int(32)):
-        idx = (31 - i)
-        total = aug[int(idx), int(32)]
-        for j in range(int((idx + 1)), int(32)):
+    x = zeros1d(16)
+    for i in range(int(0), int(16)):
+        idx = (15 - i)
+        total = aug[int(idx), int(16)]
+        for j in range(int((idx + 1)), int(16)):
             total = (total - (aug[int(idx), int(j)] * x[int(j)]))
-        x_next = zeros1d(32)
-        for c in range(int(0), int(32)):
+        x_next = zeros1d(16)
+        for c in range(int(0), int(16)):
             if c == idx:
                 x_next[int(c)] = (total / aug[int(idx), int(idx)])
             else:
@@ -90,10 +88,10 @@ class DEQ(nn.Module):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
         num_solver_steps = 3
-        self.h_star = zeros2d(1, 32)
+        self.h_star = zeros2d(1, 16)
         f_h = self.f(self.h_star, x)
         tanh_prime = (1.0 - (f_h * f_h))
-        J = (df_dh(self.W, tanh_prime) - eye(32))
+        J = (df_dh(self.W, tanh_prime) - eye(16))
         for k in range(int(0), int(num_solver_steps)):
             g = (self.f(self.h_star, x) - self.h_star)
             delta = linsolve(J, g[int(0)])
@@ -159,20 +157,20 @@ class DEQ(nn.Module):
 # === Program ===
 torch.manual_seed(int(0))
 print(print(DEVICE))
-W = rand_array(32, 32, 0.01)
-U = rand_array(784, 32, 0.02)
-b = zeros2d(1, 32)
-Wo = rand_array(32, 784, 0.05)
+W = rand_array(16, 16, 0.01)
+U = rand_array(784, 16, 0.02)
+b = zeros2d(1, 16)
+Wo = rand_array(16, 784, 0.05)
 bo = zeros2d(1, 784)
 deq = DEQ(W, U, b, Wo, bo).to(DEVICE)
-images = 10
-X = rand_array(10, 784, 1.0)
+images = 50
+X = rand_array(50, 784, 1.0)
 x0 = torch.stack([torch.as_tensor(X[int(0)])])
 recon_before = deq(x0)
 loss_before = deq.loss(x0, recon_before)
 print(print(loss_before))
-epochs = 1
-lr = 0.0001
+epochs = 20
+lr = 0.001
 print(deq.train(X, epochs, lr, images))
 recon_after = deq(x0)
 loss_after = deq.loss(x0, recon_after)

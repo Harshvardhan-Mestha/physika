@@ -33,7 +33,7 @@ A point that maps to itself under :math:`f` is called a **fixed point** (or **eq
 Rather than run :math:`f` a fixed number of times, a DEQ directly *solves* for this fixed point.
 The infinite stack of identical layers is replaced by a single object, the equilibrium, and the entire forward pass becomes "find the :math:`h^\star` that :math:`f` leaves unchanged" [BaiDEQ2019]_.
 
-.. figure:: /_static/tutorial_files/deq/deq.png
+.. figure:: /_static/tutorial_files/deq/deq.jpg
    :alt: An infinitely deep weight-tied network whose hidden state converges to a single fixed point h-star.
    :align: center
    :width: 500px
@@ -47,7 +47,7 @@ We work with three objects throughout.
 
 The **input** :math:`x \in \mathbb{R}^{d}` is the data the network is given (for us, a flattened :math:`28 \times 28 = 784`-dimensional MNIST image, a vector of shape :math:`(d,)`).
 
-The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 32`).
+The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 16`).
 
 The **parameters** :math:`\theta` collect every learnable weight and bias in the layer.
 In our model :math:`\theta = \{W, U, b, W_o, b_o\}`.
@@ -143,9 +143,9 @@ That column scaling is the ``df_dh`` helper, one entry at a time:
 .. code-block:: text
 
     def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
-        J: ℝ[n,n] = zeros2d(32, 32)
-        for c:ℕ(32):
-            for r:ℕ(32):
+        J: ℝ[n,n] = zeros2d(16, 16)
+        for c:ℕ(16):
+            for r:ℕ(16):
                 J[r, c] = W[r, c] * tanh_prime[0, c]
         return J
 
@@ -272,34 +272,34 @@ Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_
             I[i, i] = 1.0
         return I
 
-    def linsolve(A: ℝ[32, 32], b: ℝ[32]): ℝ[32]:
-        aug: ℝ[32, 33] = zeros2d(32, 33)
-        for i:ℕ(32):
-            for c:ℕ(32):
+    def linsolve(A: ℝ[16, 16], b: ℝ[16]): ℝ[16]:
+        aug: ℝ[16, 17] = zeros2d(16, 17)
+        for i:ℕ(16):
+            for c:ℕ(16):
                 aug[i, c] = A[i, c]
-            aug[i, 32] = b[i]
-        for i:ℕ(32):
-            piv = zeros1d(33)
-            for c:ℕ(33):
+            aug[i, 16] = b[i]
+        for i:ℕ(16):
+            piv = zeros1d(17)
+            for c:ℕ(17):
                 piv[c] = aug[i, c]
-            aug_next = zeros2d(32, 33)
-            for r:ℕ(32):
+            aug_next = zeros2d(16, 17)
+            for r:ℕ(16):
                 if r == i:
-                    for c:ℕ(33):
+                    for c:ℕ(17):
                         aug_next[r, c] = piv[c] / piv[i]
                 else:
                     fac = aug[r, i] / piv[i]
-                    for c:ℕ(33):
+                    for c:ℕ(17):
                         aug_next[r, c] = aug[r, c] - fac * piv[c]
             aug = aug_next
-        x: ℝ[32] = zeros1d(32)
-        for i:ℕ(32):
-            idx = 31 - i
-            total = aug[idx, 32]
-            for j:ℕ(idx + 1, 32):
+        x: ℝ[16] = zeros1d(16)
+        for i:ℕ(16):
+            idx = 15 - i
+            total = aug[idx, 16]
+            for j:ℕ(idx + 1, 16):
                 total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(32)
-            for c:ℕ(32):
+            x_next = zeros1d(16)
+            for c:ℕ(16):
                 if c == idx:
                     x_next[c] = total / aug[idx, idx]
                 else:
@@ -315,16 +315,16 @@ We now have every piece: the layer :math:`f`, its Jacobian ``df_dh``, and the li
 The DEQ class puts them together.
 It is an autoencoding DEQ: an MNIST image :math:`x` drives the layer to an equilibrium hidden state :math:`h^\star`, and a linear decoder maps :math:`h^\star` back to a :math:`784`-dimensional reconstruction :math:`\hat{x}`, trained to match :math:`x`.
 
-The ``equilibrium`` method is where the pieces meet. It computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2`, freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(32)``, then runs the chord iteration: residual, linear solve, update.
+The ``equilibrium`` method is where the pieces meet. It computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2`, freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(16)``, then runs the chord iteration: residual, linear solve, update.
 
 .. code-block:: text
 
     def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
         num_solver_steps: ℕ = 3
-        this.h_star = zeros2d(1, 32)
+        this.h_star = zeros2d(1, 16)
         f_h: ℝ[1,n] = this.f(this.h_star, x)
         tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(32)
+        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(16)
         for k:ℕ(num_solver_steps):
             g = this.f(this.h_star, x) - this.h_star
             delta = linsolve(J, g[0])
@@ -371,14 +371,13 @@ Full Code
 .. code-block:: text
 
     physika.seed(0)
-
     def tanh(a: ℝ[p,q]): ℝ[p,q]:
         num: ℝ[p,q] = exp(a) - exp(-a)
         denom: ℝ[p,q] = exp(a) + exp(-a)
         return num / denom
 
     def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
-        return for i:ℕ(n) → for j:ℕ(m) → μ * eps ~ 𝒩(0.0, 1.0)
+        return for i:ℕ(n) → ε: ℝ[m] ~ Normal(0.0, μ, m)
 
     def zeros2d(n: ℝ, m: ℝ): ℝ[n, m]:
         return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
@@ -393,40 +392,36 @@ Full Code
         return I
 
     def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
-        J: ℝ[n,n] = zeros2d(32, 32)
-        for c:ℕ(32):
-            for r:ℕ(32):
-                J[r, c] = W[r, c] * tanh_prime[0, c]
-        return J
+        return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
-    def linsolve(A: ℝ[32, 32], b: ℝ[32]): ℝ[32]:
-        aug: ℝ[32, 33] = zeros2d(32, 33)
-        for i:ℕ(32):
-            for c:ℕ(32):
+    def linsolve(A: ℝ[16, 16], b: ℝ[16]): ℝ[16]:
+        aug: ℝ[16, 17] = zeros2d(16, 17)
+        for i:ℕ(16):
+            for c:ℕ(16):
                 aug[i, c] = A[i, c]
-            aug[i, 32] = b[i]
-        for i:ℕ(32):
-            piv = zeros1d(33)
-            for c:ℕ(33):
+            aug[i, 16] = b[i]
+        for i:ℕ(16):
+            piv = zeros1d(17)
+            for c:ℕ(17):
                 piv[c] = aug[i, c]
-            aug_next = zeros2d(32, 33)
-            for r:ℕ(32):
+            aug_next = zeros2d(16, 17)
+            for r:ℕ(16):
                 if r == i:
-                    for c:ℕ(33):
+                    for c:ℕ(17):
                         aug_next[r, c] = piv[c] / piv[i]
                 else:
                     fac = aug[r, i] / piv[i]
-                    for c:ℕ(33):
+                    for c:ℕ(17):
                         aug_next[r, c] = aug[r, c] - fac * piv[c]
             aug = aug_next
-        x: ℝ[32] = zeros1d(32)
-        for i:ℕ(32):
-            idx = 31 - i
-            total = aug[idx, 32]
-            for j:ℕ(idx + 1, 32):
+        x: ℝ[16] = zeros1d(16)
+        for i:ℕ(16):
+            idx = 15 - i
+            total = aug[idx, 16]
+            for j:ℕ(idx + 1, 16):
                 total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(32)
-            for c:ℕ(32):
+            x_next = zeros1d(16)
+            for c:ℕ(16):
                 if c == idx:
                     x_next[c] = total / aug[idx, idx]
                 else:
@@ -440,10 +435,10 @@ Full Code
             return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
             num_solver_steps: ℕ = 3
-            this.h_star = zeros2d(1, 32)
+            this.h_star = zeros2d(1, 16)
             f_h: ℝ[1,n] = this.f(this.h_star, x)
             tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(32)
+            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(16)
             for k:ℕ(num_solver_steps):
                 g = this.f(this.h_star, x) - this.h_star
                 delta = linsolve(J, g[0])
@@ -455,7 +450,7 @@ Full Code
         def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
             diff: ℝ[1,784] = target - x_hat
             return sum(diff * diff)
-        def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ):
+        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ):
             for epoch:ℕ(epochs):
                 for i:ℕ(images):
                     x: ℝ[1,d] = [X[i]]
@@ -477,23 +472,23 @@ Full Code
             this.bo = this.bo - lr * learnable_grads[4]
 
     print(DEVICE)
-    W: ℝ[32,32] = rand_array(32, 32, 0.01)
-    U: ℝ[784,32] = rand_array(784, 32, 0.02)
-    b: ℝ[1,32] = zeros2d(1, 32)
-    Wo: ℝ[32,784] = rand_array(32, 784, 0.05)
+    W: ℝ[16,16] = rand_array(16, 16, 0.01)
+    U: ℝ[784,16] = rand_array(784, 16, 0.02)
+    b: ℝ[1,16] = zeros2d(1, 16)
+    Wo: ℝ[16,784] = rand_array(16, 784, 0.05)
     bo: ℝ[1,784] = zeros2d(1, 784)
     deq: DEQ = DEQ(W, U, b, Wo, bo)
 
-    images: ℝ = 10
-    X: ℝ[10, 784] = load_mnist(images)
+    images: ℝ = 50
+    X: ℝ[50, 784] = load_mnist(images)      
 
     x0: ℝ[1,784] = [X[0]]
     recon_before: ℝ[1,784] = deq(x0)
     loss_before: ℝ = deq.loss(x0, recon_before)
     print(loss_before)
 
-    epochs: ℕ = 10
-    lr: ℝ = 0.0001
+    epochs: ℕ = 20
+    lr: ℝ = 0.001
     deq.train(X, epochs, lr, images)
     recon_after: ℝ[1,784] = deq(x0)
     loss_after: ℝ = deq.loss(x0, recon_after)
@@ -505,10 +500,10 @@ Training plots
 
 After running the code above (~90 minutes), you should see the average reconstruction loss decrease over epochs as the model learns to encode and decode the digits through its equilibrium state.
 
-.. .. figure:: /_static/tutorial_files/deq/deq_train_curve.png
-..    :alt:
-..    :align: center
-..    :width: 750px
+.. figure:: /_static/tutorial_files/deq/deq_train_plot.png
+   :alt:
+   :align: center
+   :width: 750px
 
 
 References
@@ -525,4 +520,3 @@ References
 .. [Wikipedia_Banach] Wikipedia,
     *Banach fixed-point theorem*.
     https://en.wikipedia.org/wiki/Banach_fixed-point_theorem
-
