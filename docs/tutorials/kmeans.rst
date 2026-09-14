@@ -74,6 +74,32 @@ clusters :math:`k`, K-Means proceeds as follows:
    center or center of figure, of a plane figure or solid figure is the mean
    position of all the points in the figure. [CentroidWikipedia]_
 
+Centroid Initialization
+------------------------
+
+Before any points can be assigned, K-Means needs a starting position for each
+of the :math:`k` centroids (step 1 of the algorithm above). This
+implementation picks each initial centroid uniformly at random from within
+the bounding box of the dataset.
+
+.. math::
+
+   \mu_j \sim \mathcal{U}(\text{lo}, \text{hi}), \qquad
+   \text{lo} = \operatorname{data\_min}(X), \quad
+   \text{hi} = \operatorname{data\_max}(X)
+
+.. code-block:: text
+
+   def rand_centroid(lo: ℝ[DIM], hi: ℝ[DIM]): ℝ[DIM]:
+       s: ℝ[DIM] ~ 𝒰(0.0, 1.0, DIM)
+       return lo + s * (hi - lo)
+
+.. note::
+   Bounding box: The smallest axis-aligned box that contains a set of
+   points, defined by the element-wise minimum (``lo``) and maximum
+   (``hi``) coordinates across the dataset. Sampling within it is a simple
+   way to place initial centroids somewhere near the data.
+
 Distance and Cluster Assignment
 -------------------------------
 
@@ -162,6 +188,47 @@ applies this operation to every point in the dataset.
    returns the smallest value itself, ``argmin`` returns the index (or
    input) that produces that smallest value. Here it returns the index of
    the nearest centroid, not the distance to it.
+
+Centroid Update
+----------------
+
+Once every point has a label, step 3 of the algorithm recomputes each
+centroid as the mean of the points currently assigned to it. ``new_centroid``
+computes this mean for a single cluster; if no points are currently assigned
+to that cluster (an "empty" cluster), it keeps the previous centroid
+(``fallback``) instead of dividing by zero.
+
+.. math::
+
+   \mu_j \leftarrow
+   \begin{cases}
+   \dfrac{1}{|\{i : c_i = j\}|} \sum_{i : c_i = j} x_i
+       & \text{if } |\{i : c_i = j\}| > 0 \\[6pt]
+   \mu_j^{\text{old}} & \text{otherwise}
+   \end{cases}
+
+.. code-block:: text
+
+   def new_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, fallback: ℝ[DIM]): ℝ[DIM]:
+       sums: ℝ[DIM] = for c:ℕ(DIM) -> c * 0.0
+       cnt: ℝ = 0.0
+       for i:ℕ(NPTS):
+           if labels[i] == target:
+               sums = sums + X[i]
+               cnt += 1.0
+       if cnt > 0.0:
+           return sums / cnt
+       else:
+           return fallback
+
+``update_centroids`` applies ``new_centroid`` to every cluster index,
+producing the full set of :math:`k` updated centroids for the next
+iteration.
+
+.. code-block:: text
+
+   def update_centroids(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C_old: ℝ[K, DIM]): ℝ[K, DIM]:
+       return for j:ℕ(K) -> new_centroid(X, labels, j, C_old[j])
 
 Objective Function
 ------------------
@@ -322,28 +389,6 @@ It performs the reduction explicitly using a loop:
    collection of values into a single value, such as a sum, by repeatedly
    combining elements. Summing an array's elements in a loop, as
    ``get_sum_of_1d_array`` does, is a simple example.
-
-Function Summary
-----------------
-
-.. list-table::
-   :header-rows: 1
-   :widths: 25 75
-
-   * - Function
-     - Description
-   * - ``new_centroid(X, labels, target, fallback)``
-     - Returns mean of all points in X assigned to the target cluster.
-   * - ``update_centroids(X, labels, C_old)``
-     - Assigns new centroids using the `new_centroid` function.
-   * - ``rand_centroid(hi, lo)``
-     - Generates a random centroid within the element-wise bounding box defined by lo and hi.
-
-.. note::
-   Bounding box: The smallest axis-aligned box that contains a set of
-   points, defined by the element-wise minimum (``lo``) and maximum
-   (``hi``) coordinates across the dataset. Sampling within it is a simple
-   way to place initial centroids somewhere near the data.
 
 Full Code
 ---------
