@@ -4,6 +4,7 @@ import torch.optim as optim
 from physika.runtime import DEVICE
 
 from physika.runtime import print
+from physika.runtime import compute_grad
 
 # === Functions ===
 def absolute(a):
@@ -20,6 +21,12 @@ def sq_dist(a, b):
     for c in range(int(0), int(DIM)):
         acc = acc + ((a[int(c)] - b[int(c)]) * (a[int(c)] - b[int(c)]))
     return acc
+
+def wcss(X, labels, C):
+    total = 0.0
+    for i in range(int(0), int(NPTS)):
+        total = total + sq_dist(X[int(i)], C[int(labels[int(i)])])
+    return total
 
 def argmin_vec(v):
     av = absolute(v)
@@ -101,7 +108,11 @@ torch.manual_seed(int(SEED))
 X_MEAN = 3.0
 X_STD = 0.7
 X = torch.stack([torch.distributions.Normal(X_MEAN, X_STD).rsample((int(DIM),)) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-C = kmeans(X)
+C = torch.as_tensor(kmeans(X)).requires_grad_(True).to(DEVICE)
 labels = assign_labels(X, C)
 print(print(labels))
 print(print(C))
+J = wcss(X, labels, C)
+grad_C = compute_grad(lambda _dC: wcss(X, labels, _dC), C)
+print(print(J))
+print(print(grad_C))

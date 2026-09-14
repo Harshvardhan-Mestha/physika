@@ -40,6 +40,15 @@ def sq_dist(a: ℝ[DIM], b: ℝ[DIM]): ℝ:
         acc += (a[c] - b[c]) * (a[c] - b[c])
     return acc
 
+# Objective function: within-cluster sum of squared distances (WCSS).
+# Smooth in C for fixed labels, so it is differentiable even though the
+# assignment step (argmin) that produced `labels` is not.
+def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
+    total: ℝ = 0.0
+    for i:ℕ(NPTS):
+        total += sq_dist(X[i], C[labels[i]])
+    return total
+
 # Index of the smallest entry of a length-K vector.
 def argmin_vec(v: ℝ[K]): ℝ:
     av: ℝ[K] = absolute(v)
@@ -124,3 +133,10 @@ labels: ℝ[NPTS] = assign_labels(X, C)
 
 print(labels)         # cluster index of each point
 print(C)              # final centroid coordinates
+
+# Within Cluster Sum of Squared Distances
+J: ℝ = wcss(X, labels, C)
+grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+
+print(J)               # within-cluster sum of squared distances
+print(grad_C)          # ≈ 0: centroids sit at a stationary point of J

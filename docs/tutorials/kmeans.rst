@@ -271,6 +271,36 @@ objective by repeatedly alternating between assigning points to their
 nearest centroid and recomputing each centroid as the mean of its
 assigned points.
 
+Differentiability
+------------------
+
+Lloyd's algorithm as a whole is **not** differentiable end to end: the
+assignment step picks each label with ``argmin``, a discontinuous operation
+that has no useful gradient. But once the labels for an iteration are fixed,
+``wcss`` above is just a sum of squared differences - a smooth function of ``C``
+so physika's ``grad`` can differentiate straight through it, even though
+``labels`` itself came from a non-differentiable ``argmin``.
+
+Since ``new_centroid`` sets each centroid to the mean of its assigned points,
+and the mean is exactly the value that minimizes a sum of squared distances,
+the converged centroids should sit at a stationary point of :math:`J` (holding
+labels fixed). That is, :math:`\nabla_C J \approx 0`:
+
+.. code-block:: text
+
+   def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
+       total: ℝ = 0.0
+       for i:ℕ(NPTS):
+           total += sq_dist(X[i], C[labels[i]])
+       return total
+
+.. code-block:: text
+
+   J: ℝ = wcss(X, labels, C)
+   grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+
+   print(J)               # within-cluster sum of squared distances
+   print(grad_C)          # ≈ 0: centroids sit at a stationary point of J
 
 Convergence
 -----------
@@ -484,6 +514,12 @@ Full Code
                 acc += (a[c] - b[c]) * (a[c] - b[c])
             return acc
 
+        def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
+            total: ℝ = 0.0
+            for i:ℕ(NPTS):
+                total += sq_dist(X[i], C[labels[i]])
+            return total
+
         def argmin_vec(v: ℝ[K]): ℝ:
             av: ℝ[K] = absolute(v)
             best_j: ℝ = 0.0
@@ -560,6 +596,12 @@ Full Code
 
         print(labels)         # cluster index of each point
         print(C)              # final centroid coordinates
+
+        J: ℝ = wcss(X, labels, C)
+        grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+
+        print(J)               # within-cluster sum of squared distances
+        print(grad_C)          # ≈ 0: centroids sit at a stationary point of J
 
 References
 ----------
