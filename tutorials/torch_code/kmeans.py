@@ -4,7 +4,6 @@ import torch.optim as optim
 from physika.runtime import DEVICE
 
 from physika.runtime import print
-from physika.runtime import compute_grad
 
 # === Functions ===
 def absolute(a):
@@ -21,12 +20,6 @@ def sq_dist(a, b):
     for c in range(int(0), int(DIM)):
         acc = acc + ((a[int(c)] - b[int(c)]) * (a[int(c)] - b[int(c)]))
     return acc
-
-def wcss(X, labels, C):
-    total = 0.0
-    for i in range(int(0), int(NPTS)):
-        total = total + sq_dist(X[int(i)], C[int(labels[int(i)])])
-    return total
 
 def argmin_vec(v):
     av = absolute(v)
@@ -66,6 +59,18 @@ def new_centroid(X, labels, target, fallback):
 
 def update_centroids(X, labels, C_old):
     return torch.stack([new_centroid(X, labels, j, C_old[int(j)]) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+
+def sgd_centroid_update(x, c, eta):
+    return (c - (eta * compute_grad(lambda _dc: sq_dist(x, _dc), c)))
+
+def online_cluster_centroid(X, labels, target, init):
+    c = init
+    n = 0.0
+    for i in range(int(0), int(NPTS)):
+        if labels[int(i)] == target:
+            n = n + 1.0
+            c = sgd_centroid_update(X[int(i)], c, (1.0 / (2.0 * n)))
+    return c
 
 def data_min(X):
     m = X[int(0)]
@@ -108,11 +113,9 @@ torch.manual_seed(int(SEED))
 X_MEAN = 3.0
 X_STD = 0.7
 X = torch.stack([torch.distributions.Normal(X_MEAN, X_STD).rsample((int(DIM),)) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-C = torch.as_tensor(kmeans(X)).requires_grad_(True).to(DEVICE)
+C = kmeans(X)
 labels = assign_labels(X, C)
 print(print(labels))
 print(print(C))
-J = wcss(X, labels, C)
-grad_C = compute_grad(lambda _dC: wcss(X, labels, _dC), C)
-print(print(J))
-print(print(grad_C))
+online_C = torch.stack([online_cluster_centroid(X, labels, j, C[int(j)]) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+print(print(online_C))

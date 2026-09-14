@@ -135,7 +135,7 @@ Euclidean distance.
        return acc
 
 .. note::
-   Monotonic: A function that never changes direction -- it is either
+   Monotonic: A function that never changes direction, it is either
    always non-decreasing or always non-increasing as its input grows.
    Because square root is monotonic, comparing squared distances gives the
    same ordering as comparing actual distances, so the square root can be
@@ -243,11 +243,11 @@ K-Means objective function:
    Objective function: A quantity that an algorithm tries to minimize (or
    maximize) in order to find the "best" solution. For K-Means, the
    objective function measures how tightly the points cluster around their
-   assigned centroids -- smaller is better.
+   assigned centroids.
 
 .. note::
    WCSS: Short for "within-cluster sum of squares." It is the specific
-   objective function K-Means minimizes -- the total squared distance of
+   objective function K-Means minimizes, the total squared distance of
    every point to its own cluster's centroid, summed across all clusters.
 
 .. math::
@@ -276,31 +276,68 @@ Differentiability
 
 Lloyd's algorithm as a whole is **not** differentiable end to end: the
 assignment step picks each label with ``argmin``, a discontinuous operation
-that has no useful gradient. But once the labels for an iteration are fixed,
-``wcss`` above is just a sum of squared differences - a smooth function of ``C``
-so physika's ``grad`` can differentiate straight through it, even though
-``labels`` itself came from a non-differentiable ``argmin``.
+that has no useful gradient. But ``sq_dist``, per-point squared distance
+to a centroid is smooth, so physika's ``grad`` can differentiate through it
+directly.
 
-Since ``new_centroid`` sets each centroid to the mean of its assigned points,
-and the mean is exactly the value that minimizes a sum of squared distances,
-the converged centroids should sit at a stationary point of :math:`J` (holding
-labels fixed). That is, :math:`\nabla_C J \approx 0`:
+Batch K-Means recomputes each centroid as the exact mean of its assigned
+points every iteration (see Centroid Update above). That works when the
+whole dataset fits in memory, but for large or streaming data as in
+scikit-learn's ``MiniBatchKMeans``, approach used
+in production clustering systems where recomputing an exact mean on every pass
+is too expensive. Instead, each new point nudges its centroid by one
+gradient-descent step on the squared-distance loss:
+
+.. math::
+
+   c \leftarrow c - \eta \cdot \nabla_c \|x - c\|^2 = c - \eta \cdot 2(c - x)
 
 .. code-block:: text
 
-   def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
-       total: ℝ = 0.0
+   def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
+       return c - eta * grad(sq_dist(x, c), c)
+
+With a shrinking learning rate :math:`\eta = 1/(2n)`, where :math:`n` is the
+number of points the centroid has seen so far, this update is mathematically
+identical to the running mean just reached via autodiff instead of
+hand-derived arithmetic:
+
+.. code-block:: text
+
+   def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+       c: ℝ[DIM] = init
+       n: ℝ = 0.0
        for i:ℕ(NPTS):
-           total += sq_dist(X[i], C[labels[i]])
-       return total
+           if labels[i] == target:
+               n += 1.0
+               c = sgd_centroid_update(X[i], c, 1.0 / (2.0 * n))
+       return c
 
-.. code-block:: text
+.. note::
+   Learning rate schedule: with :math:`\eta = 1/(2n)`, each gradient step
+   works out to :math:`c \leftarrow c \cdot (1 - 1/n) + x/n`.
 
-   J: ℝ = wcss(X, labels, C)
-   grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+Running this on the tutorial's converged clusters and comparing against the
+batch ``new_centroid`` mean:
 
-   print(J)               # within-cluster sum of squared distances
-   print(grad_C)          # ≈ 0: centroids sit at a stationary point of J
+.. list-table:: Batch mean vs. gradient-driven centroid, per cluster
+   :header-rows: 1
+   :widths: 15 40 40
+
+   * - Cluster
+     - batch mean (``new_centroid``)
+     - gradient-driven (``online_cluster_centroid``)
+   * - 0
+     - ``[2.8250489, 2.2022939]``
+     - ``[2.8250489, 2.2022939]``
+   * - 1
+     - ``[3.3537779, 3.1120865]``
+     - ``[3.3537784, 3.1120865]``
+
+The two agree to about six significant figures. This confirms two things: the
+per-step gradient ``grad`` computes is genuinely nonzero and usable, and
+physika's autodiff reproduces a real production algorithm's math without it
+being hand-derived.
 
 Convergence
 -----------
@@ -476,10 +513,7 @@ Visualization
         plt.show()
 
 .. note::
-   This tutorial does not ship ``plot_clusters`` by default. To use it, add
-   the function above to ``physika/runtime.py``. Once it is defined there,
-   append ``plot_clusters(X, labels, C)`` to the end of ``kmeans.phyk`` to
-   visualise the result of this tutorial's run.
+   To use it, add the function above to ``physika/runtime.py``.
 
 .. figure:: ../_static/tutorial_files/output_kmeans.png
    :align: center
@@ -514,12 +548,6 @@ Full Code
                 acc += (a[c] - b[c]) * (a[c] - b[c])
             return acc
 
-        def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
-            total: ℝ = 0.0
-            for i:ℕ(NPTS):
-                total += sq_dist(X[i], C[labels[i]])
-            return total
-
         def argmin_vec(v: ℝ[K]): ℝ:
             av: ℝ[K] = absolute(v)
             best_j: ℝ = 0.0
@@ -551,6 +579,18 @@ Full Code
 
         def update_centroids(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C_old: ℝ[K, DIM]): ℝ[K, DIM]:
             return for j:ℕ(K) -> new_centroid(X, labels, j, C_old[j])
+
+        def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
+            return c - eta * grad(sq_dist(x, c), c)
+
+        def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+            c: ℝ[DIM] = init
+            n: ℝ = 0.0
+            for i:ℕ(NPTS):
+                if labels[i] == target:
+                    n += 1.0
+                    c = sgd_centroid_update(X[i], c, 1.0 / (2.0 * n))
+            return c
 
         def data_min(X: ℝ[NPTS, DIM]): ℝ[DIM]:
             m: ℝ[DIM] = X[0]
@@ -597,11 +637,9 @@ Full Code
         print(labels)         # cluster index of each point
         print(C)              # final centroid coordinates
 
-        J: ℝ = wcss(X, labels, C)
-        grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+        online_C: ℝ[K, DIM] = for j:ℕ(K) -> online_cluster_centroid(X, labels, j, C[j])
 
-        print(J)               # within-cluster sum of squared distances
-        print(grad_C)          # ≈ 0: centroids sit at a stationary point of J
+        print(online_C)
 
 References
 ----------

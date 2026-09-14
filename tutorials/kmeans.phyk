@@ -40,15 +40,6 @@ def sq_dist(a: ℝ[DIM], b: ℝ[DIM]): ℝ:
         acc += (a[c] - b[c]) * (a[c] - b[c])
     return acc
 
-# Objective function: within-cluster sum of squared distances (WCSS).
-# Smooth in C for fixed labels, so it is differentiable even though the
-# assignment step (argmin) that produced `labels` is not.
-def wcss(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C: ℝ[K, DIM]): ℝ:
-    total: ℝ = 0.0
-    for i:ℕ(NPTS):
-        total += sq_dist(X[i], C[labels[i]])
-    return total
-
 # Index of the smallest entry of a length-K vector.
 def argmin_vec(v: ℝ[K]): ℝ:
     av: ℝ[K] = absolute(v)
@@ -85,6 +76,21 @@ def new_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, fallback: �
 # Update step: recompute all K centroids
 def update_centroids(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C_old: ℝ[K, DIM]): ℝ[K, DIM]:
     return for j:ℕ(K) -> new_centroid(X, labels, j, C_old[j])
+
+# Gradient-based alternative to the batch mean above. This is mathematically
+# the running mean, just reached via autodiff instead of hand-derived
+# arithmetic.
+def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
+    return c - eta * grad(sq_dist(x, c), c)
+
+def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+    c: ℝ[DIM] = init
+    n: ℝ = 0.0
+    for i:ℕ(NPTS):
+        if labels[i] == target:
+            n += 1.0
+            c = sgd_centroid_update(X[i], c, 1.0 / (2.0 * n))
+    return c
 
 def data_min(X: ℝ[NPTS, DIM]): ℝ[DIM]:
     m: ℝ[DIM] = X[0]
@@ -134,9 +140,6 @@ labels: ℝ[NPTS] = assign_labels(X, C)
 print(labels)         # cluster index of each point
 print(C)              # final centroid coordinates
 
-# Within Cluster Sum of Squared Distances
-J: ℝ = wcss(X, labels, C)
-grad_C: ℝ[K, DIM] = grad(wcss(X, labels, C), C)
+online_C: ℝ[K, DIM] = for j:ℕ(K) -> online_cluster_centroid(X, labels, j, C[j])
 
-print(J)               # within-cluster sum of squared distances
-print(grad_C)          # ≈ 0: centroids sit at a stationary point of J
+print(online_C) # gradient-driven centroids
