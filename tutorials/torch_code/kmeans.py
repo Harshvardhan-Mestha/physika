@@ -76,29 +76,32 @@ def rand_centroid(lo, hi):
     s = torch.distributions.Uniform(0.0, 1.0).rsample((int(DIM),))
     return (lo + (s * (hi - lo)))
 
+def kmeans(X):
+    lo_box, hi_box = data_min(X), data_max(X)
+    C = torch.stack([rand_centroid(lo_box, hi_box) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+    prev_labels = torch.stack([((i * 0.0) - 1.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    labels = torch.stack([(i * 0.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    converged_at = (0.0 - 1.0)
+    for step in range(int(0), int(ITERS)):
+        labels = assign_labels(X, C)
+        moved = get_sum_of_1d_array(absolute((labels - prev_labels)))
+        if moved == 0.0:
+            if converged_at < 0.0:
+                converged_at = step
+        else:
+            C = update_centroids(X, labels, C)
+        prev_labels = labels
+    print(converged_at)
+    return C
+
 # === Program ===
-SEED = 2
-K = 2
-DIM = 2
-NPTS = 15
+SEED, K, DIM, NPTS = 2, 2, 2, 15
 ITERS = 50
 torch.manual_seed(int(SEED))
-X = torch.tensor([[2.0, 2.2], [2.8, 2.9], [1.9, 3.1], [3.1, 2.0], [2.5, 2.6], [3.6, 3.1], [4.1, 2.7], [3.3, 3.4], [4.0, 3.6], [3.7, 2.9], [3.0, 4.0], [2.7, 3.9], [3.4, 4.2], [2.9, 3.5], [3.2, 3.7]], device=DEVICE)
-lo_box = data_min(X)
-hi_box = data_max(X)
-C = torch.stack([rand_centroid(lo_box, hi_box) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
-prev_labels = torch.stack([((i * 0.0) - 1.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-labels = torch.stack([(i * 0.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-converged_at = (0.0 - 1.0)
-for step in range(int(0), int(ITERS)):
-    labels = assign_labels(X, C)
-    moved = get_sum_of_1d_array(absolute((labels - prev_labels)))
-    if moved == 0.0:
-        if converged_at < 0.0:
-            converged_at = step
-    else:
-        C = update_centroids(X, labels, C)
-    prev_labels = labels
-print(print(converged_at))
+X_MEAN = 3.0
+X_STD = 0.7
+X = torch.stack([torch.distributions.Normal(X_MEAN, X_STD).rsample((int(DIM),)) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+C = kmeans(X)
+labels = assign_labels(X, C)
 print(print(labels))
 print(print(C))

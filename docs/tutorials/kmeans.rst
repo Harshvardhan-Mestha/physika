@@ -1,11 +1,21 @@
 K-Means Clustering (Lloyd's algorithm)
 ======================================
 
-K-Means is an unsupervised machine learning algorithm used to partition a
-dataset into a fixed number of groups called `clusters`. The objective is to
-have clusters which contains points which are similar to each other. The
-algorithm alternates between assigning points to their nearest centroid and
-recomputing the centroids as the mean of their assigned points [Lloyd1982]_.
+In this tutorial we are going to explore kmeans algorithm and understand how it
+can be used to discover groups within a dataset. It is widely used in customer
+segmentation, anomaly detection, and recommendation systems. K-Means is an
+unsupervised machine learning algorithm used to partition a dataset into a
+fixed number of groups called `clusters`. The objective is to have clusters
+which contains points which are similar to each other. [Lloyd1982]_
+
+.. note::
+   Unsupervised: A class of machine learning problems where the algorithm
+   learns structure from data that has no labeled outcomes to predict.
+
+   Lloyd's algorithm: The specific iterative procedure (alternating assignment
+   and update steps) used to solve the K-Means clustering problem. In practice
+   `K-Means` and `Lloyd's algorithm` are used interchangeably, though other
+   algorithms exist for solving the same objective.
 
 .. figure:: ../_static/tutorial_files/K_Means.svg
    :align: center
@@ -29,7 +39,8 @@ clusters :math:`k`, K-Means proceeds as follows:
         c_i \leftarrow \underset{j \in \{1, \ldots, k\}}{\operatorname{argmin}}
         \|x_i - \mu_j\|^2
 
-3. Update each centroid by taking the mean of all the points assigned to it:
+3. Update each centroid :math:`c_i` by taking the mean of all the points
+   assigned to it:
 
     .. math::
 
@@ -38,6 +49,30 @@ clusters :math:`k`, K-Means proceeds as follows:
         \sum_{i:c_i=j} x_i
 
 4. Repeat steps 2 and 3 until the clusters assignments converge.
+
+.. code:: text
+
+   def kmeans(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
+       lo_box, hi_box: ℝ[DIM] = data_min(X), data_max(X)
+       C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+       prev_labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
+       labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
+       converged_at: ℝ = 0.0 - 1.0
+       for step:ℕ(ITERS):
+           labels = assign_labels(X, C)
+           moved = get_sum_of_1d_array(absolute(labels - prev_labels))
+           if moved == 0.0:
+               if converged_at < 0.0:
+                   converged_at = step
+           else:
+               C = update_centroids(X, labels, C)
+           prev_labels = labels
+       return C
+
+.. note::
+   Centroid: In mathematics and physics, the centroid, also known as geometric
+   center or center of figure, of a plane figure or solid figure is the mean
+   position of all the points in the figure. [CentroidWikipedia]_
 
 Distance and Cluster Assignment
 -------------------------------
@@ -48,6 +83,10 @@ centroid and selecting the centroid with the smallest distance.
 
 Squared Euclidean Distance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Euclidean distance is the ordinary straight-line distance between two points in
+space, computed via the Pythagorean theorem. It is the most common way of
+measuring how `close` two points are in K-Means clustering.
 
 For a point :math:`x` and centroid :math:`\mu`, the squared Euclidean distance
 is
@@ -61,17 +100,68 @@ because the square-root function is monotonic. Therefore, the centroid that
 minimizes the squared distance is also the centroid that minimizes the
 Euclidean distance.
 
+.. code:: text
+
+   def sq_dist(a: ℝ[DIM], b: ℝ[DIM]): ℝ:
+       acc: ℝ = 0.0
+       for c:ℕ(DIM):
+           acc += (a[c] - b[c]) * (a[c] - b[c])
+       return acc
+
+.. note::
+   Monotonic: A function that never changes direction -- it is either
+   always non-decreasing or always non-increasing as its input grows.
+   Because square root is monotonic, comparing squared distances gives the
+   same ordering as comparing actual distances, so the square root can be
+   safely skipped.
+
 Finding the Nearest Centroid
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For each data point :math:`x_i`, K-Means assigns the point to the
-centroid with the minimum distance:
+After initializing the centroids, each data point is assigned to the centroid
+that is closest to it. For a data point :math:`x_i`, the assigned cluster is
+determined by computing its squared Euclidean distance to every centroid and
+selecting the centroid with the smallest distance.
 
 .. math::
 
     c_i =
     \underset{j \in \{1,\ldots,k\}}{\operatorname{argmin}}
     \|x_i - \mu_j\|^2
+
+where :math:`c_i` is the cluster assigned to :math:`x_i` and :math:`\mu_j` is
+the :math:`j`-th centroid.
+
+The assignment is implemented using three functions. First, ``argmin_vec``
+finds the index corresponding to the smallest value in a vector. ``assign_one``
+computes the distance from one data point to every centroid and uses
+``argmin_vec`` to select the nearest centroid. Finally, ``assign_labels``
+applies this operation to every point in the dataset.
+
+.. code-block:: text
+
+   def argmin_vec(v: ℝ[K]): ℝ:
+       av: ℝ[K] = absolute(v)
+       best_j: ℝ = 0.0
+       best_v: ℝ = av[0]
+       for j:ℕ(K):
+           if av[j] < best_v:
+               best_v = av[j]
+               best_j = j
+       return best_j
+
+   def assign_one(point: ℝ[DIM], C: ℝ[K, DIM]): ℝ:
+       dists: ℝ[K] = for j:ℕ(K) -> sq_dist(point, C[j])
+       return argmin_vec(dists)
+
+   def assign_labels(X: ℝ[NPTS, DIM], C: ℝ[K, DIM]): ℝ[NPTS]:
+       return for i:ℕ(NPTS) -> assign_one(X[i], C)
+
+.. note::
+   argmin: Short for "argument of the minimum." Unlike ``min``, which
+   returns the smallest value itself, ``argmin`` returns the index (or
+   input) that produces that smallest value. Here it returns the index of
+   the nearest centroid, not the distance to it.
 
 Objective Function
 ------------------
@@ -81,6 +171,17 @@ clusters such that points within the same cluster are as close to their
 cluster centroid as possible. This is achieved by minimizing the
 within-cluster sum of squared distances (WCSS), also known as the
 K-Means objective function:
+
+.. note::
+   Objective function: A quantity that an algorithm tries to minimize (or
+   maximize) in order to find the "best" solution. For K-Means, the
+   objective function measures how tightly the points cluster around their
+   assigned centroids -- smaller is better.
+
+.. note::
+   WCSS: Short for "within-cluster sum of squares." It is the specific
+   objective function K-Means minimizes -- the total squared distance of
+   every point to its own cluster's centroid, summed across all clusters.
 
 .. math::
 
@@ -119,6 +220,12 @@ If
 
 then no point has changed clusters and the algorithm has converged.
 
+.. note::
+   Convergence: The point at which an iterative algorithm's output stops
+   changing (or changes by less than some tolerance) between successive
+   iterations. For K-Means, convergence means every point has settled into its
+   final cluster and further sweeps would not move any labels.
+
 Complexity
 ----------
 
@@ -128,6 +235,13 @@ assignment step requires :math:`O(nkd)` operations.
 The centroid update also requires :math:`O(nd)` work for each cluster in the
 implementation, giving an overall per-iteration complexity of approximately
 :math:`O(nk + nkd)` i.e. :math:`O(nkd)`.
+
+.. note::
+   Big-O notation: A way of describing how the running time (or memory) of
+   an algorithm grows as the input size grows, ignoring constant factors.
+   :math:`O(nkd)` means the work grows roughly in proportion to the number
+   of points (:math:`n`), clusters (:math:`k`), and dimensions (:math:`d`)
+   multiplied together.
 
 Helper Functions
 ----------------
@@ -141,6 +255,50 @@ It uses the identity:
     
     def absolute(a: ℝ[m]): ℝ[m]:
         return sqrt(a * a)
+
+``data_min`` function finds the element-wise minimum value across all points.
+
+.. math::
+
+    m = X_0
+
+    m =
+    \frac{
+        m + X_i - |m - X_i|
+    }{2},
+    \qquad i \in \{0,\ldots,NPTS-1\}
+
+    \operatorname{data\_min}(X) = m
+
+.. code-block:: text
+
+   def data_min(X: ℝ[NPTS, DIM]): ℝ[DIM]:
+       m: ℝ[DIM] = X[0]
+       for i:ℕ(NPTS):
+           m = (m + X[i] - absolute(m - X[i])) * 0.5
+       return m
+
+``data_max`` function finds the element-wise maximum value across all points.
+
+.. math::
+
+    m = X_0
+
+    m =
+    \frac{
+        m + X_i + |m - X_i|
+    }{2},
+    \qquad i \in \{0,\ldots,NPTS-1\}
+
+    \operatorname{data\_min}(X) = m
+
+.. code-block:: text
+    
+   def data_max(X: ℝ[NPTS, DIM]): ℝ[DIM]:
+       m: ℝ[DIM] = X[0]
+       for i:ℕ(NPTS):
+           m = (m + X[i] + absolute(m - X[i])) * 0.5
+       return m
 
 ``get_sum_of_1d_array`` function computes the sum of all elements in a
 one-dimensional array:
@@ -159,6 +317,12 @@ It performs the reduction explicitly using a loop:
             total += x[i]
         return total
 
+.. note::
+   Reduction: A common programming pattern that collapses (or "reduces") a
+   collection of values into a single value, such as a sum, by repeatedly
+   combining elements. Summing an array's elements in a loop, as
+   ``get_sum_of_1d_array`` does, is a simple example.
+
 Function Summary
 ----------------
 
@@ -168,38 +332,25 @@ Function Summary
 
    * - Function
      - Description
-   * - ``sq_dist(a, b)``
-     - Returns the Squared Euclidean distance between 2 positions.
-   * - ``argmin_vec(v)``
-     - Returns the index of the elements in `v` with the smallest absolute value.
-   * - ``assign_one(point, C)``
-     - Assigns a centroid nearest to the point.
-   * - ``assign_labels(X, C)``
-     - Assigns label to all the points using `assign_one` function.
    * - ``new_centroid(X, labels, target, fallback)``
      - Returns mean of all points in X assigned to the target cluster.
    * - ``update_centroids(X, labels, C_old)``
      - Assigns new centroids using the `new_centroid` function.
-   * - ``data_min(X)``
-     - Computes the element-wise minimum value across all points in X.
-   * - ``data_max(X)``
-     - Computes the element-wise maximum value across all points in X.
    * - ``rand_centroid(hi, lo)``
      - Generates a random centroid within the element-wise bounding box defined by lo and hi.
-   * - ``absolute(a)``
-     - Returns the absolute value of the input.
-   * - ``get_sum_of_1d_array(x)``
-     - Returns the sum of the elements of a 1-D array.
+
+.. note::
+   Bounding box: The smallest axis-aligned box that contains a set of
+   points, defined by the element-wise minimum (``lo``) and maximum
+   (``hi``) coordinates across the dataset. Sampling within it is a simple
+   way to place initial centroids somewhere near the data.
 
 Full Code
 ---------
 
     .. code-block:: text
-        
-        SEED:  ℝ = 2
-        K:     ℝ = 2
-        DIM:   ℝ = 2
-        NPTS:  ℝ = 15
+
+        SEED, K, DIM, NPTS: ℝ = 2, 2, 2, 15
         ITERS: ℕ = 50
 
         physika.seed(SEED)
@@ -267,33 +418,34 @@ Full Code
             s: ℝ[DIM] ~ 𝒰(0.0, 1.0, DIM)
             return lo + s * (hi - lo)
 
-        X: ℝ[15, 2] = [
-            [2.0, 2.2], [2.8, 2.9], [1.9, 3.1], [3.1, 2.0], [2.5, 2.6],
-            [3.6, 3.1], [4.1, 2.7], [3.3, 3.4], [4.0, 3.6], [3.7, 2.9],
-            [3.0, 4.0], [2.7, 3.9], [3.4, 4.2], [2.9, 3.5], [3.2, 3.7]
-        ]
+        X_MEAN: ℝ = 3.0
+        X_STD:  ℝ = 0.7
 
-        lo_box: ℝ[DIM] = data_min(X)
-        hi_box: ℝ[DIM] = data_max(X)
-        C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+        X: ℝ[NPTS, DIM] = for i:ℕ(NPTS) -> ε: ℝ[DIM] ~ 𝒩(X_MEAN, X_STD, DIM)
 
-        prev_labels:  ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
-        labels:       ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
-        converged_at: ℝ = 0.0 - 1.0
+        def kmeans(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
+            lo_box, hi_box: ℝ[DIM] = data_min(X), data_max(X)
+            C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+            prev_labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
+            labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
+            converged_at: ℝ = 0.0 - 1.0
+            for step:ℕ(ITERS):
+                labels = assign_labels(X, C)
+                moved = get_sum_of_1d_array(absolute(labels - prev_labels))
+                if moved == 0.0:
+                    if converged_at < 0.0:
+                        converged_at = step
+                else:
+                    C = update_centroids(X, labels, C)
+                prev_labels = labels
+            print(converged_at)   # labels first stopped changing (-1 = never)
+            return C
 
-        for step:ℕ(ITERS):
-            labels = assign_labels(X, C)
-            moved = get_sum_of_1d_array(absolute(labels - prev_labels))
-            if moved == 0.0:
-                if converged_at < 0.0:
-                    converged_at = step
-            else:
-                C = update_centroids(X, labels, C)
-            prev_labels = labels
+        C: ℝ[K, DIM] = kmeans(X)
+        labels: ℝ[NPTS] = assign_labels(X, C)
 
-        print(converged_at)
-        print(labels)
-        print(C)
+        print(labels)         # cluster index of each point
+        print(C)              # final centroid coordinates
 
 References
 ----------
@@ -305,3 +457,7 @@ References
 .. [WestonPace] Weston.pace. Own work. CC BY-SA 3.0.
    Wikimedia Commons.
    https://commons.wikimedia.org/w/index.php?curid=2463085
+
+.. [CentroidWikipedia] "Centroid."
+   Wikipedia, The Free Encyclopedia.
+   https://en.wikipedia.org/wiki/Centroid
