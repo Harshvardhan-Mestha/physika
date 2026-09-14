@@ -390,6 +390,75 @@ It performs the reduction explicitly using a loop:
    combining elements. Summing an array's elements in a loop, as
    ``get_sum_of_1d_array`` does, is a simple example.
 
+
+Visualization
+-------------
+
+``plot_clusters`` scatters every point in ``X``, colored by its assigned cluster
+(``labels``), and marks centroid in ``C`` with a black "x" using *matplotlib*.
+
+.. code-block:: python
+
+    def plot_clusters(X: torch.Tensor, labels: torch.Tensor,
+                       C: torch.Tensor) -> None:
+        """Visualise 2D K-Means clustering results with matplotlib.
+
+        Scatters every point in ``X``, colored by its assigned cluster
+        (``labels``), and marks each centroid in ``C`` with a black "x".
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Data points, shape ``(n_points, 2)``.
+        labels : torch.Tensor
+            Cluster index assigned to each point, shape ``(n_points,)``.
+        C : torch.Tensor
+            Final centroid coordinates, shape ``(k, 2)``.
+
+        Examples
+        --------
+        >>> from physika.runtime import plot_clusters
+        >>> plot_clusters(X, labels, C)
+        """
+        import matplotlib.pyplot as plt
+
+        X_np = X.detach().numpy()
+        labels_np = labels.detach().numpy().astype(int)
+        C_np = C.detach().numpy()
+
+        k = C_np.shape[0]
+        cmap = plt.colormaps.get_cmap("tab10")
+
+        plt.figure(figsize=(8, 6))
+        for j in range(k):
+            mask = labels_np == j
+            plt.scatter(X_np[mask, 0], X_np[mask, 1],
+                        s=40, color=cmap(j), label=f"Cluster {j}")
+        plt.scatter(C_np[:, 0], C_np[:, 1],
+                    s=200, marker="x", color="black", linewidths=2,
+                    label="Centroids")
+        plt.xlabel("x[0]")
+        plt.ylabel("x[1]")
+        plt.title("K-Means Clustering")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+.. note::
+   This tutorial does not ship ``plot_clusters`` by default. To use it, add
+   the function above to ``physika/runtime.py``. Once it is defined there,
+   append ``plot_clusters(X, labels, C)`` to the end of ``kmeans.phyk`` to
+   visualise the result of this tutorial's run.
+
+.. figure:: ../_static/tutorial_files/output_kmeans.png
+   :align: center
+   :width: 70%
+   :alt: K-Means clustering result for the tutorial's example dataset.
+
+   Figure 2: Points colored by assigned cluster, with the final centroids
+   marked by a black "x".
+
 Full Code
 ---------
 
