@@ -83,8 +83,8 @@ def update_centroids(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C_old: ℝ[K, DIM]): 
 def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
     return c - eta * grad(sq_dist(x, c), c)
 
-def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
-    c: ℝ[DIM] = init
+def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ): ℝ[DIM]:
+    c: ℝ[DIM] = for d:ℕ(DIM) -> d * 0.0
     n: ℝ = 0.0
     for i:ℕ(NPTS):
         if labels[i] == target:
@@ -132,12 +132,29 @@ def kmeans(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
     print(converged_at)   # labels first stopped changing (-1 = never)
     return C
 
+# Same loop as kmeans() above, but every update is a gradient step
+# (grad_cluster_centroid) instead of the closed-form mean. It samples its
+# own initial centroids and assigns its own labels every sweep -- it never
+# looks at kmeans()'s C or labels.
+def kmeans_grad(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
+    lo_box, hi_box: ℝ[DIM] = data_min(X), data_max(X)
+    C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+    prev_labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
+    labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
+    for step:ℕ(ITERS):
+        labels = assign_labels(X, C)
+        moved = get_sum_of_1d_array(absolute(labels - prev_labels))
+        if moved != 0.0:
+            C = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j)
+        prev_labels = labels
+    return C
+
 C: ℝ[K, DIM] = kmeans(X)
 labels: ℝ[NPTS] = assign_labels(X, C)
 
 print(labels)         # cluster index of each point
 print(C)              # final centroid coordinates
 
-grad_centroids: ℝ[K, DIM] = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j, C[j])
+C_grad: ℝ[K, DIM] = kmeans_grad(X)
 
-print(grad_centroids) # gradient-driven centroids
+print(C_grad)          # independent gradient-driven run -- compare to C

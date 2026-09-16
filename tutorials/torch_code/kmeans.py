@@ -63,8 +63,8 @@ def update_centroids(X, labels, C_old):
 def sgd_centroid_update(x, c, eta):
     return (c - (eta * compute_grad(lambda _dc: sq_dist(x, _dc), c)))
 
-def grad_cluster_centroid(X, labels, target, init):
-    c = init
+def grad_cluster_centroid(X, labels, target):
+    c = torch.stack([(d * 0.0) for _fi_d in range(int(DIM)) for d in [torch.tensor(float(_fi_d), device=DEVICE)]])
     n = 0.0
     for i in range(int(0), int(NPTS)):
         if labels[int(i)] == target:
@@ -106,6 +106,19 @@ def kmeans(X):
     print(converged_at)
     return C
 
+def kmeans_grad(X):
+    lo_box, hi_box = data_min(X), data_max(X)
+    C = torch.stack([rand_centroid(lo_box, hi_box) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+    prev_labels = torch.stack([((i * 0.0) - 1.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    labels = torch.stack([(i * 0.0) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    for step in range(int(0), int(ITERS)):
+        labels = assign_labels(X, C)
+        moved = get_sum_of_1d_array(absolute((labels - prev_labels)))
+        if moved != 0.0:
+            C = torch.stack([grad_cluster_centroid(X, labels, j) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+        prev_labels = labels
+    return C
+
 # === Program ===
 SEED, K, DIM, NPTS = 2, 2, 2, 15
 ITERS = 50
@@ -116,5 +129,5 @@ C = kmeans(X)
 labels = assign_labels(X, C)
 print(print(labels))
 print(print(C))
-grad_centroids = torch.stack([grad_cluster_centroid(X, labels, j, C[int(j)]) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
-print(print(grad_centroids))
+C_grad = kmeans_grad(X)
+print(print(C_grad))

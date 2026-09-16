@@ -311,8 +311,8 @@ hand-derived arithmetic:
 
 .. code-block:: text
 
-   def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
-       c: ℝ[DIM] = init
+   def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ): ℝ[DIM]:
+       c: ℝ[DIM] = for d:ℕ(DIM) -> d * 0.0
        n: ℝ = 0.0
        for i:ℕ(NPTS):
            if labels[i] == target:
@@ -324,31 +324,47 @@ hand-derived arithmetic:
    Learning rate schedule: with :math:`\eta = 1/(2n)`, each gradient step
    works out to :math:`c \leftarrow c \cdot (1 - 1/n) + x/n`.
 
-Running ``tutorials/kmeans.phyk`` as is (``SEED = 2``, so this is
-reproducible), ``kmeans(X)`` converges to the batch centroids ``C``, and
-``grad_cluster_centroid`` reaches its own centroids, ``grad_centroids``, by
-taking a gradient step per point instead. The table below compares the two
-directly ``C`` is not recomputed here, just carried over for the
-comparison:
+Replacing ``update_centroids`` with ``grad_cluster_centroid`` in ``kmeans()``
+to make ``kmeans_grad()`` gives us a ``kmeans`` implementation which updates
+its centroid by including the effects of each point one by one:
 
-.. list-table:: Converged centroids, batch update vs. gradient-driven update
+.. code-block:: text
+
+   def kmeans_grad(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
+       lo_box, hi_box: ℝ[DIM] = data_min(X), data_max(X)
+       C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+       prev_labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
+       labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
+       for step:ℕ(ITERS):
+           labels = assign_labels(X, C)
+           moved = get_sum_of_1d_array(absolute(labels - prev_labels))
+           if moved != 0.0:
+               C = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j)
+           prev_labels = labels
+       return C
+
+   C: ℝ[K, DIM] = kmeans(X)
+   C_grad: ℝ[K, DIM] = kmeans_grad(X)
+   print(C)
+   print(C_grad)
+
+The two independent runs different random starting centroids, converge to the
+same two cluster centers, showing that a gradient based implementation is also
+as good as a tradition ``kmeans`` implementation:
+
+.. list-table:: Converged centroids, batch (kmeans) vs. independent gradient-driven run (kmeans_grad)
    :header-rows: 1
    :widths: 15 40 40
 
    * - Cluster
      - ``C[j]`` (batch mean)
-     - ``grad_centroids[j]`` (gradient-driven)
-   * - 0
+     - ``C_grad[j]`` (gradient-driven)
+   * - A
      - ``[2.8250489, 2.2022939]``
      - ``[2.8250489, 2.2022939]``
-   * - 1
+   * - B
      - ``[3.3537779, 3.1120865]``
      - ``[3.3537784, 3.1120865]``
-
-The two agree to about six significant figures. This confirms two things: the
-per-step gradient ``grad`` computes is genuinely nonzero and usable, and
-physika's autodiff reproduces a real production algorithm's math without it
-being hand-derived.
 
 Convergence
 -----------
@@ -583,8 +599,8 @@ Full Code
         def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
             return c - eta * grad(sq_dist(x, c), c)
 
-        def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
-            c: ℝ[DIM] = init
+        def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ): ℝ[DIM]:
+            c: ℝ[DIM] = for d:ℕ(DIM) -> d * 0.0
             n: ℝ = 0.0
             for i:ℕ(NPTS):
                 if labels[i] == target:
@@ -629,15 +645,28 @@ Full Code
             print(converged_at)   # labels first stopped changing (-1 = never)
             return C
 
+        def kmeans_grad(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
+            lo_box, hi_box: ℝ[DIM] = data_min(X), data_max(X)
+            C: ℝ[K, DIM] = for j:ℕ(K) -> rand_centroid(lo_box, hi_box)
+            prev_labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0 - 1.0
+            labels: ℝ[NPTS] = for i:ℕ(NPTS) -> i * 0.0
+            for step:ℕ(ITERS):
+                labels = assign_labels(X, C)
+                moved = get_sum_of_1d_array(absolute(labels - prev_labels))
+                if moved != 0.0:
+                    C = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j)
+                prev_labels = labels
+            return C
+
         C: ℝ[K, DIM] = kmeans(X)
         labels: ℝ[NPTS] = assign_labels(X, C)
 
         print(labels)         # cluster index of each point
         print(C)              # final centroid coordinates
 
-        grad_centroids: ℝ[K, DIM] = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j, C[j])
+        C_grad: ℝ[K, DIM] = kmeans_grad(X)
 
-        print(grad_centroids)
+        print(C_grad)          # independent gradient-driven run -- compare to C
 
 References
 ----------
