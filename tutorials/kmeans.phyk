@@ -83,7 +83,7 @@ def update_centroids(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], C_old: ℝ[K, DIM]): 
 def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
     return c - eta * grad(sq_dist(x, c), c)
 
-def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
     c: ℝ[DIM] = init
     n: ℝ = 0.0
     for i:ℕ(NPTS):
@@ -110,9 +110,7 @@ def rand_centroid(lo: ℝ[DIM], hi: ℝ[DIM]): ℝ[DIM]:
     return lo + s * (hi - lo)
 
 # Example dataset (NPTS x DIM)
-X_MEAN: ℝ = 3.0
-X_STD:  ℝ = 0.7
-
+X_MEAN, X_STD: ℝ = 3.0, 0.7
 X: ℝ[NPTS, DIM] = for i:ℕ(NPTS) -> ε: ℝ[DIM] ~ 𝒩(X_MEAN, X_STD, DIM)
 
 # Run Lloyd's algorithm
@@ -140,6 +138,6 @@ labels: ℝ[NPTS] = assign_labels(X, C)
 print(labels)         # cluster index of each point
 print(C)              # final centroid coordinates
 
-online_C: ℝ[K, DIM] = for j:ℕ(K) -> online_cluster_centroid(X, labels, j, C[j])
+grad_centroids: ℝ[K, DIM] = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j, C[j])
 
-print(online_C) # gradient-driven centroids
+print(grad_centroids) # gradient-driven centroids

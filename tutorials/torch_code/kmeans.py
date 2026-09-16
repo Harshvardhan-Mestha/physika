@@ -63,7 +63,7 @@ def update_centroids(X, labels, C_old):
 def sgd_centroid_update(x, c, eta):
     return (c - (eta * compute_grad(lambda _dc: sq_dist(x, _dc), c)))
 
-def online_cluster_centroid(X, labels, target, init):
+def grad_cluster_centroid(X, labels, target, init):
     c = init
     n = 0.0
     for i in range(int(0), int(NPTS)):
@@ -110,12 +110,11 @@ def kmeans(X):
 SEED, K, DIM, NPTS = 2, 2, 2, 15
 ITERS = 50
 torch.manual_seed(int(SEED))
-X_MEAN = 3.0
-X_STD = 0.7
+X_MEAN, X_STD = 3.0, 0.7
 X = torch.stack([torch.distributions.Normal(X_MEAN, X_STD).rsample((int(DIM),)) for _fi_i in range(int(NPTS)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 C = kmeans(X)
 labels = assign_labels(X, C)
 print(print(labels))
 print(print(C))
-online_C = torch.stack([online_cluster_centroid(X, labels, j, C[int(j)]) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
-print(print(online_C))
+grad_centroids = torch.stack([grad_cluster_centroid(X, labels, j, C[int(j)]) for _fi_j in range(int(K)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]])
+print(print(grad_centroids))

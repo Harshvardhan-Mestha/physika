@@ -8,21 +8,19 @@ unsupervised machine learning algorithm used to partition a dataset into a
 fixed number of groups called `clusters`. The objective is to have clusters
 which contains points which are similar to each other. [Lloyd1982]_
 
-.. note::
-   Unsupervised: A class of machine learning problems where the algorithm
-   learns structure from data that has no labeled outcomes to predict.
-
-   Lloyd's algorithm: The specific iterative procedure (alternating assignment
-   and update steps) used to solve the K-Means clustering problem. In practice
-   `K-Means` and `Lloyd's algorithm` are used interchangeably, though other
-   algorithms exist for solving the same objective.
+In practice, K-Means is solved with Lloyd's algorithm: start with a rough
+guess for the cluster centers, then repeatedly (1) assign every point to
+its nearest center and (2) move each center to the average of the points
+assigned to it, stopping once the assignments stop changing. This simple
+loop is by far the most common way of finding a K-Means solution, so the
+names `K-Means` and `Lloyd's algorithm` are generally used interchangeably.
 
 .. figure:: ../_static/tutorial_files/K_Means.svg
    :align: center
    :width: 50%
-   :alt: Converged state of k-means algorithm.
+   :alt: Example illustration of the K-Means algorithm.
 
-   Figure 1: Converged state of k-means algorithm. [WestonPace]_
+   Figure 1: Example illustration of the K-Means algorithm. [WestonPace]_
 
 Algorithm
 ---------
@@ -50,6 +48,9 @@ clusters :math:`k`, K-Means proceeds as follows:
 
 4. Repeat steps 2 and 3 until the clusters assignments converge.
 
+``kmeans`` is the main algorithm implemented in this tutorial; it also uses
+several helper functions, each explained in its own section below.
+
 .. code:: text
 
    def kmeans(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
@@ -68,6 +69,13 @@ clusters :math:`k`, K-Means proceeds as follows:
                C = update_centroids(X, labels, C)
            prev_labels = labels
        return C
+
+The three steps above map directly onto this function: ``data_min``/
+``data_max``/``rand_centroid`` do the one-time initialization (step 1)
+before the loop starts; ``assign_labels`` runs the assignment (step 2) at
+the top of every sweep; and ``update_centroids`` runs the update (step 3)
+whenever the assignment actually changed something. The ``for step`` loop
+itself is step 4, stopping (in effect) once ``moved`` is ``0.0``.
 
 .. note::
    Centroid: In mathematics and physics, the centroid, also known as geometric
@@ -281,12 +289,11 @@ to a centroid is smooth, so physika's ``grad`` can differentiate through it
 directly.
 
 Batch K-Means recomputes each centroid as the exact mean of its assigned
-points every iteration (see Centroid Update above). That works when the
-whole dataset fits in memory, but for large or streaming data as in
-scikit-learn's ``MiniBatchKMeans``, approach used
-in production clustering systems where recomputing an exact mean on every pass
-is too expensive. Instead, each new point nudges its centroid by one
-gradient-descent step on the squared-distance loss:
+points every iteration (see Centroid Update above), which is too expensive
+to redo on every pass over large or streaming data. Production systems such
+as scikit-learn's ``MiniBatchKMeans`` [Sculley2010]_ instead update each
+centroid incrementally: one gradient step of ``sq_dist(x, c)`` taken with
+respect to the centroid ``c`` (holding the point ``x`` fixed), per point:
 
 .. math::
 
@@ -304,7 +311,7 @@ hand-derived arithmetic:
 
 .. code-block:: text
 
-   def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+   def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
        c: ℝ[DIM] = init
        n: ℝ = 0.0
        for i:ℕ(NPTS):
@@ -317,16 +324,20 @@ hand-derived arithmetic:
    Learning rate schedule: with :math:`\eta = 1/(2n)`, each gradient step
    works out to :math:`c \leftarrow c \cdot (1 - 1/n) + x/n`.
 
-Running this on the tutorial's converged clusters and comparing against the
-batch ``new_centroid`` mean:
+Running ``tutorials/kmeans.phyk`` as is (``SEED = 2``, so this is
+reproducible), ``kmeans(X)`` converges to the batch centroids ``C``, and
+``grad_cluster_centroid`` reaches its own centroids, ``grad_centroids``, by
+taking a gradient step per point instead. The table below compares the two
+directly ``C`` is not recomputed here, just carried over for the
+comparison:
 
-.. list-table:: Batch mean vs. gradient-driven centroid, per cluster
+.. list-table:: Converged centroids, batch update vs. gradient-driven update
    :header-rows: 1
    :widths: 15 40 40
 
    * - Cluster
-     - batch mean (``new_centroid``)
-     - gradient-driven (``online_cluster_centroid``)
+     - ``C[j]`` (batch mean)
+     - ``grad_centroids[j]`` (gradient-driven)
    * - 0
      - ``[2.8250489, 2.2022939]``
      - ``[2.8250489, 2.2022939]``
@@ -464,29 +475,21 @@ Visualization
 ``plot_clusters`` scatters every point in ``X``, colored by its assigned cluster
 (``labels``), and marks centroid in ``C`` with a black "x" using *matplotlib*.
 
+Using `plot_clusters` in physika:
+
+.. code-block:: text
+
+    C: ℝ[K, DIM] = kmeans(X)
+    labels: ℝ[NPTS] = assign_labels(X, C)
+    plot_clusters(X, labels, C)
+
+.. note::
+
+   To use it, add the function above to ``physika/runtime.py``.
+
 .. code-block:: python
 
-    def plot_clusters(X: torch.Tensor, labels: torch.Tensor,
-                       C: torch.Tensor) -> None:
-        """Visualise 2D K-Means clustering results with matplotlib.
-
-        Scatters every point in ``X``, colored by its assigned cluster
-        (``labels``), and marks each centroid in ``C`` with a black "x".
-
-        Parameters
-        ----------
-        X : torch.Tensor
-            Data points, shape ``(n_points, 2)``.
-        labels : torch.Tensor
-            Cluster index assigned to each point, shape ``(n_points,)``.
-        C : torch.Tensor
-            Final centroid coordinates, shape ``(k, 2)``.
-
-        Examples
-        --------
-        >>> from physika.runtime import plot_clusters
-        >>> plot_clusters(X, labels, C)
-        """
+    def plot_clusters(X: torch.Tensor, labels: torch.Tensor, C: torch.Tensor) -> None:
         import matplotlib.pyplot as plt
 
         X_np = X.detach().numpy()
@@ -511,9 +514,6 @@ Visualization
         plt.grid(True)
         plt.tight_layout()
         plt.show()
-
-.. note::
-   To use it, add the function above to ``physika/runtime.py``.
 
 .. figure:: ../_static/tutorial_files/output_kmeans.png
    :align: center
@@ -583,7 +583,7 @@ Full Code
         def sgd_centroid_update(x: ℝ[DIM], c: ℝ[DIM], eta: ℝ): ℝ[DIM]:
             return c - eta * grad(sq_dist(x, c), c)
 
-        def online_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
+        def grad_cluster_centroid(X: ℝ[NPTS, DIM], labels: ℝ[NPTS], target: ℝ, init: ℝ[DIM]): ℝ[DIM]:
             c: ℝ[DIM] = init
             n: ℝ = 0.0
             for i:ℕ(NPTS):
@@ -608,9 +608,7 @@ Full Code
             s: ℝ[DIM] ~ 𝒰(0.0, 1.0, DIM)
             return lo + s * (hi - lo)
 
-        X_MEAN: ℝ = 3.0
-        X_STD:  ℝ = 0.7
-
+        X_MEAN, X_STD: ℝ = 3.0, 0.7
         X: ℝ[NPTS, DIM] = for i:ℕ(NPTS) -> ε: ℝ[DIM] ~ 𝒩(X_MEAN, X_STD, DIM)
 
         def kmeans(X: ℝ[NPTS, DIM]): ℝ[K, DIM]:
@@ -637,9 +635,9 @@ Full Code
         print(labels)         # cluster index of each point
         print(C)              # final centroid coordinates
 
-        online_C: ℝ[K, DIM] = for j:ℕ(K) -> online_cluster_centroid(X, labels, j, C[j])
+        grad_centroids: ℝ[K, DIM] = for j:ℕ(K) -> grad_cluster_centroid(X, labels, j, C[j])
 
-        print(online_C)
+        print(grad_centroids)
 
 References
 ----------
@@ -647,6 +645,10 @@ References
 .. [Lloyd1982] Stuart P. Lloyd. "Least squares quantization in PCM."
    IEEE Transactions on Information Theory, 28(2), 129-137, 1982.
    DOI: 10.1109/TIT.1982.1056489.
+
+.. [Sculley2010] D. Sculley. "Web-Scale K-Means Clustering."
+   Proceedings of the 19th International Conference on World Wide Web
+   (WWW '10), 1177-1178, 2010. DOI: 10.1145/1772690.1772862.
 
 .. [WestonPace] Weston.pace. Own work. CC BY-SA 3.0.
    Wikimedia Commons.
