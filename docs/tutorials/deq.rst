@@ -48,7 +48,7 @@ We work with three objects throughout.
 
 The **input** :math:`x \in \mathbb{R}^{d}` is the data the network is given (for us, a flattened :math:`28 \times 28 = 784`-dimensional MNIST image, a vector of shape :math:`(d,)`).
 
-The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 8`).
+The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 8`, larger n increases runtime significantly).
 
 The **parameters** :math:`\theta` collect every learnable weight and bias in the layer.
 In our model :math:`\theta = \{W, U, b, W_o, b_o\}`.
@@ -73,8 +73,7 @@ In Physika the layer is written exactly as the equation reads:
 
    Here :math:`f` is a single fully connected layer for simplicity.
    If we want more depth inside :math:`f`, we can pull a layer out into a reusable
-   ``linear`` (a weight-and-bias with a :math:`\tanh`, like the fully connected
-   network's layer):
+   ``linear`` (a weight-and-bias with a :math:`\tanh`, a commonly used layer for fully connected networks):
 
    .. code-block:: text
 
@@ -92,7 +91,7 @@ In Physika the layer is written exactly as the equation reads:
    .. code-block:: text
 
        def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
-           h1: ℝ[1,n] = linear(h + x @ U, W1, b1)   # first layer folds in the input x
+           h1: ℝ[1,n] = linear(h + x @ U, W1, b1)   
            h2: ℝ[1,n] = linear(h1, W2, b2)
            return h2
 
@@ -123,12 +122,12 @@ The Banach fixed-point theorem states that a contraction on a complete space has
 This repeated-application scheme is called Picard iteration, and its error shrinks geometrically as :math:`L^k`.
 
 The theorem is what DEQ principally works on, as long as :math:`f` (the layer) is a contraction, the equilibrium exists and is unique.
-Our layer makes this easy to arrange. The slope of :math:`\tanh` is :math:`\tanh'(z) = 1 - \tanh^2(z)`, which is largest at :math:`z = 0` where it equals :math:`1` and is smaller everywhere else, so :math:`\tanh` is *1-Lipschitz*: it never stretches a distance. We can see this by computing the slope directly:
+Our layer makes this easy to arrange. The slope of :math:`\tanh` is :math:`\tanh'(z) = 1 - \tanh^2(z)`, which is largest at :math:`z = 0` where it equals :math:`1` and is smaller everywhere else, so :math:`\tanh` is *1-Lipschitz*: it never stretches a distance. We can see this by computing the slope directly, with the corresponding Physika snippet below:
 
 .. code-block:: text
 
     t: ℝ[1,n] = tanh(z)
-    slope: ℝ[1,n] = 1.0 - t * t        # 1 - tanh^2, always in (0, 1]
+    slope: ℝ[1,n] = 1.0 - t * t        
 
 Because :math:`\tanh` never stretches and :math:`W` only rescales, the layer satisfies :math:`\|f(a,x,\theta) - f(b,x,\theta)\| \le \|W\|\,\|a - b\|`, so keeping :math:`\|W\|` below :math:`1` makes :math:`f` a contraction.
 This is why the weights are initialized small, which keeps the equilibrium unique and the solver well behaved. (The same :math:`1 - \tanh^2` slope returns below, where it builds the Jacobian.)
@@ -152,6 +151,7 @@ Note that this returns the solution vector :math:`x` directly; it never forms :m
 Two small points make the elimination fit the language cleanly.
 First, ``eye`` builds the identity by filling a zero matrix and setting the diagonal entries to :math:`1` in a loop.
 Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_next``) rather than writing into it in place, which keeps automatic differentiation happy when the solve is differentiated during training.
+This is implemented in Physika, with the snippet below:
 
 .. code-block:: text
 
@@ -160,6 +160,12 @@ Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_
         for i:ℕ(n):
             I[i, i] = 1.0
         return I
+
+    def zeros2d(n: ℝ, m: ℝ): ℝ[n, m]:
+        return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
+
+    def zeros1d(k: ℝ): ℝ[k]:
+        return for i:ℕ(k) → i * 0.0
 
     def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
         aug: ℝ[8, 9] = zeros2d(8, 9)
@@ -250,6 +256,7 @@ That column scaling is the ``df_dh`` helper, implemented in Physika below:
         return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
 With :math:`J` in hand, one Newton step is the linear solve followed by the update, which maps line for line onto the math (:math:`\delta` solves :math:`J\delta = g`, then :math:`h \leftarrow h - \delta`):
+The Physika code below implements the Newton step, which is repeated in a loop until the residual is small enough, combining all the helpers defined above:
 
 .. code-block:: text
 
@@ -307,9 +314,6 @@ Differentiability in Physika
 
 A Physika class compiles to a differentiable module, and ``grad()`` backpropagates through its methods with automatic differentiation.
 We do not write a custom backward pass. Because the forward solver is an ordinary loop, Physika differentiates straight through the unrolled quasi-Newton iteration and into every parameter.
-The frozen Jacobian :math:`J`, changes how fast the iteration converges, not where it converges to, we freeze it since recomputing it at every step is expensive computationally.
-When the iteration has settled on :math:`h^\star`, the gradient of the unrolled loop satisfies the same linear relation as the implicit-differentiation result, and the Jacobian cancels out.
-So autograd through the unrolled solve recovers the exact implicit gradient :math:`-\frac{\partial \mathcal{L}}{\partial h^\star}(\partial f/\partial h^\star - I)^{-1}\frac{\partial f}{\partial \theta}` without writing a function that implements the backward pass.
 
 
 Methods for Solving the Fixed Point
@@ -323,10 +327,10 @@ This is not an exhaustive list, but below are the solvers most commonly used, fr
     It requires nothing beyond evaluating :math:`f`, and by the Banach theorem it converges whenever :math:`f` is a contraction, but its convergence is only linear and it diverges if :math:`f` is not a contraction.
 
 2. Newton's Method
-    Newton's method uses the residual Jacobian :math:`J = \partial f/\partial h - I` to take much larger steps, solving :math:`J \delta = g(h_k)` and setting :math:`h_{k+1} = h_k - \delta`.
+    Newton's method [Wikipedia_Newton]_ uses the residual Jacobian :math:`J = \partial f/\partial h - I` to take much larger steps, solving :math:`J \delta = g(h_k)` and setting :math:`h_{k+1} = h_k - \delta`.
     Near the solution it converges quadratically, so it needs very few iterations, at the cost of forming and solving with the :math:`n \times n` Jacobian every step.
 
-3. Quasi-Newton
+3. Quasi-Newton Methods
     Quasi-Newton methods keep Newton's fast convergence while avoiding a fresh exact Jacobian every step.
     The implementation below uses the simplest such scheme, the **chord method**, which forms the residual Jacobian once at the initial iterate and reuses it for every step.
     Production DEQs use stronger variants such as **Broyden's method** [Wikipedia_Broyden]_, which maintains a low-rank running approximation of the Jacobian, and **Anderson acceleration** [Wikipedia_Anderson]_, which forms each iterate as a least-squares-optimal mix of the last few [BaiDEQ2019]_.
@@ -334,14 +338,15 @@ This is not an exhaustive list, but below are the solvers most commonly used, fr
 Regardless of which solver is chosen, the backward pass is unchanged: the implicit-differentiation formula depends only on the converged :math:`h^\star`, so improving the solver never changes how gradients are computed, but it affects how fast the layer converges to the equilibrium.
 
 
-Implementing a DEQ in Physika
+Training a DEQ in Physika
 -----------------------------
 
-We now have every piece: the layer :math:`f`, its Jacobian ``df_dh``, and the linear solve ``linsolve``.
-We now put the pieces together.
+We now have every component needed to implement a simple DEQ model.
+These are the layer :math:`f`, its Jacobian ``df_dh``, and the linear solve ``linsolve``.
 It is an autoencoding DEQ, where an MNIST image :math:`x` drives the layer to an equilibrium hidden state :math:`h^\star`, and a linear decoder maps :math:`h^\star` back to a :math:`784`-dimensional reconstruction :math:`\hat{x}`, trained to match :math:`x`.
 
 The ``equilibrium`` routine is where the pieces meet. It computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2`, freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(8)``, then runs the chord iteration: residual, linear solve, update.
+The Physika snippets in this section contain the implementation of the equilibrium solver, calling of the solver, and the loss function, and how the training loop is implemented.
 
 .. code-block:: text
 
@@ -371,10 +376,35 @@ The call operator ``λ`` runs the solver and decodes the equilibrium into data s
         diff: ℝ[1,784] = target - x_hat
         return sum(diff * diff)
 
-**Training** - the code block below contains the train loop and its helper functions:
+
+To train the model we need a DEQ class (shown as a snippet below), which we instantiate allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W``) with ``this.`` 
+When calling the class (``this(x)``), runs the ``λ`` method, so ``this(x)`` is equivalent to ``λ(x)``. The above sections are implemented as individual methods, for simplicity.
+The Full Code section contains the complete Physika code, which can be run as-is.
 
 .. code-block:: text
-    def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+
+    class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
+        h_star: ℝ[1,n]
+        def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
+            return tanh(h @ W + x @ U + b)
+        def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
+            num_solver_steps: ℕ = 3
+            this.h_star = zeros2d(1, 8)
+            f_h: ℝ[1,n] = this.f(this.h_star, x)
+            tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
+            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
+            for k:ℕ(num_solver_steps):
+                g = this.f(this.h_star, x) - this.h_star
+                delta = linsolve(J, g[0])
+                this.h_star = this.h_star - [delta]
+            return this.h_star
+        def λ(x: ℝ[1,d]) → ℝ[1,d]:
+            h_star: ℝ[1,n] = this.equilibrium(x)
+            return h_star @ Wo + bo
+        def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
+            diff: ℝ[1,784] = target - x_hat
+            return sum(diff * diff)
+        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
             loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
                 for i:ℕ(images):
@@ -399,20 +429,43 @@ The call operator ``λ`` runs the solver and decodes the equilibrium into data s
             this.Wo = this.Wo - lr * learnable_grads[3]
             this.bo = this.bo - lr * learnable_grads[4]
 
-In the `train()` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad()``, and the parameters are updated with a simple gradient descent step.
-Even though the `update_params` method uses simple gradient descent, more sophisticated optimizers can be used as well.
+
+
+In the ``train()`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad()``, and the parameters are updated with a simple gradient descent step.
+For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad()`` returns a list of gradients in the same order as the parameters.
+The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
+
+So when training the model the entire training looks like the snippet below, shown is a simplified example on dummy data:
+
+.. code-block:: text
+
+    # initialize learnable parameters to zeros
+    W: ℝ[8,8] = zeros2d(8, 8)
+    U: ℝ[784,8] = zeros2d(784, 8)
+    b: ℝ[1,8] = zeros2d(1, 8)
+    Wo: ℝ[8,784] = zeros2d(8, 784)
+    bo: ℝ[1,784] = zeros2d(1, 784)
+
+    # train for 20 epochs with learning rate 0.001, on a single image (here all zeros)
+    images: ℝ = 1
+    X: ℝ[1, 784] = zeros2d(1, 784) 
+    epochs: ℕ = 20
+    lr: ℝ = 0.001
+    # instantiate the DEQ class with all learnable parameters
+    deq: DEQ = DEQ(W, U, b, Wo, bo)
+
+    losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
+
+````
 
 .. note::
 
     The DEQ is differentiable end to end with no hand-written backward. Gradients flow through the decoder, through the unrolled quasi-Newton solve (including ``linsolve``), and into :math:`W, U, b, W_o, b_o` automatically. Because the frozen Jacobian cancels at the fixed point, this recovers the exact implicit gradient.
 
+Dataset
+----------- 
 
-Training a DEQ on the MNIST Dataset
------------------------------------
-
-This is the complete program for training the DEQ on MNIST. 
-
-**Dataset** - MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
+MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
 ``load_mnist`` returns the first ``n`` MNIST digits as a ``ℝ[n, 784]`` array of flattened images. It is not a built-in; add this helper to ``physika/runtime.py``:
 
 .. code-block:: python
@@ -423,8 +476,13 @@ This is the complete program for training the DEQ on MNIST.
         mnist = datasets.MNIST(root="./data", train=True, download=True, transform=transforms.ToTensor())
         return torch.stack([mnist[i][0].view(784) for i in range(int(n))]).to(DEVICE)
 
-**Plotting the training curve** - To plot the training curve, add this helper to ``physika/runtime.py``:
+
+Plotting Graphs
+-----------------------------------
+To plot the training curve, add the ``plot_deq_losses`` helper to ``physika/runtime.py``:
+
 .. code-block:: python
+
     def plot_deq_losses(losses, before, after):
         import matplotlib.pyplot as plt
         losses = losses.cpu().detach().numpy()
@@ -439,7 +497,7 @@ This is the complete program for training the DEQ on MNIST.
         ax1.plot(epochs, losses)
         ax1.set_xlabel("Epoch")
         ax1.set_ylabel("Loss")
-        ax1.set_title("DEQ Training Curve\nLoss by epoch, 10 images of MNIST, 20 epochs")
+        ax1.set_title("DEQ Training Curve\nLoss by epoch, 50 images of MNIST, 20 epochs")
         ax1.set_xticks(epochs)
 
         ax2.bar(["Before training", "After 20 epochs"], [float(before), float(after)], width=0.5)
@@ -450,8 +508,16 @@ This is the complete program for training the DEQ on MNIST.
         plt.savefig("deq_train_plot.png", dpi=300, bbox_inches="tight")
         plt.show()
 
+The section below combines all that we have covered as a single standalone ``.phyk`` file, and contains the whole DEQ model as a single class.
+
 Full Code
 ---------
+
+Here we load 50 images of MNIST, train the DEQ for 20 epochs, and plot the training curve and reconstruction loss before and after training.
+We keep the learning rate as ``0.001``, and the number of solver steps as ``3``, and hidden size as ``8`` as the hyperparameters. 
+The ``rand_array`` helper is used to initialize the learnable parameters with small random values.
+The first line ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
+More details on this can be found in the `Sampling documentation <https://physika.readthedocs.io/en/latest/elf.html#random-sampling>`__.
 
 .. code-block:: text
 
@@ -569,7 +635,7 @@ Full Code
     deq: DEQ = DEQ(W, U, b, Wo, bo)
 
     images: ℝ = 50
-    # X: ℝ[50, 784] = rand_array(50, 784, 1.0)      
+    # add load_mnist to physika/runtime.py to run on MNIST data
     X: ℝ[50, 784] = load_mnist(images) 
 
     x0: ℝ[1,784] = [X[0]]
@@ -583,6 +649,7 @@ Full Code
     recon_after: ℝ[1,784] = deq(x0)
     loss_after: ℝ = deq.loss(x0, recon_after)
     print(loss_after)
+    # add plot_deq_losses helper to physika/runtime.py to create and save plots
     plot_deq_losses(losses, loss_before, loss_after)
 
 
@@ -611,6 +678,10 @@ References
 .. [Wikipedia_Banach] Wikipedia,
     *Banach fixed-point theorem*.
     https://en.wikipedia.org/wiki/Banach_fixed-point_theorem
+
+.. [Wikipedia_Newton] Wikipedia,
+    *Newton's method*.
+    https://en.wikipedia.org/wiki/Newton%27s_method
 
 .. [Wikipedia_Broyden] Wikipedia,
     *Broyden's method*.
