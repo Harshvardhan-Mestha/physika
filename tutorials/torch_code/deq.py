@@ -32,33 +32,33 @@ def df_dh(W, tanh_prime, n=None):
     return torch.stack([torch.as_tensor(torch.stack([torch.as_tensor((W[int(r)][int(c)] * tanh_prime[int(0)][int(c)])) for c in range(int(n))]).float()) for r in range(int(n))])
 
 def linsolve(A, b):
-    aug = zeros2d(16, 17)
-    for i in range(int(0), int(16)):
-        for c in range(int(0), int(16)):
+    aug = zeros2d(8, 9)
+    for i in range(int(0), int(8)):
+        for c in range(int(0), int(8)):
             aug[int(i), int(c)] = A[int(i), int(c)]
-        aug[int(i), int(16)] = b[int(i)]
-    for i in range(int(0), int(16)):
-        piv = zeros1d(17)
-        for c in range(int(0), int(17)):
+        aug[int(i), int(8)] = b[int(i)]
+    for i in range(int(0), int(8)):
+        piv = zeros1d(9)
+        for c in range(int(0), int(9)):
             piv[int(c)] = aug[int(i), int(c)]
-        aug_next = zeros2d(16, 17)
-        for r in range(int(0), int(16)):
+        aug_next = zeros2d(8, 9)
+        for r in range(int(0), int(8)):
             if r == i:
-                for c in range(int(0), int(17)):
+                for c in range(int(0), int(9)):
                     aug_next[int(r), int(c)] = (piv[int(c)] / piv[int(i)])
             else:
                 fac = (aug[int(r), int(i)] / piv[int(i)])
-                for c in range(int(0), int(17)):
+                for c in range(int(0), int(9)):
                     aug_next[int(r), int(c)] = (aug[int(r), int(c)] - (fac * piv[int(c)]))
         aug = aug_next
-    x = zeros1d(16)
-    for i in range(int(0), int(16)):
-        idx = (15 - i)
-        total = aug[int(idx), int(16)]
-        for j in range(int((idx + 1)), int(16)):
+    x = zeros1d(8)
+    for i in range(int(0), int(8)):
+        idx = (7 - i)
+        total = aug[int(idx), int(8)]
+        for j in range(int((idx + 1)), int(8)):
             total = (total - (aug[int(idx), int(j)] * x[int(j)]))
-        x_next = zeros1d(16)
-        for c in range(int(0), int(16)):
+        x_next = zeros1d(8)
+        for c in range(int(0), int(8)):
             if c == idx:
                 x_next[int(c)] = (total / aug[int(idx), int(idx)])
             else:
@@ -88,10 +88,10 @@ class DEQ(nn.Module):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
         num_solver_steps = 3
-        self.h_star = zeros2d(1, 16)
+        self.h_star = zeros2d(1, 8)
         f_h = self.f(self.h_star, x)
         tanh_prime = (1.0 - (f_h * f_h))
-        J = (df_dh(self.W, tanh_prime) - eye(16))
+        J = (df_dh(self.W, tanh_prime) - eye(8))
         for k in range(int(0), int(num_solver_steps)):
             g = (self.f(self.h_star, x) - self.h_star)
             delta = linsolve(J, g[int(0)])
@@ -116,19 +116,23 @@ class DEQ(nn.Module):
         X = torch.as_tensor(X, device=DEVICE).float()
         lr = torch.as_tensor(lr, device=DEVICE).float()
         images = torch.as_tensor(images, device=DEVICE).float()
+        losses = torch.stack([(i * 0) for _fi_i in range(int(epochs)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
         for epoch in range(int(0), int(epochs)):
             for i in range(int(0), int(images)):
                 x = torch.stack([torch.as_tensor(X[int(i)])])
                 preds = self(x)
                 L = self.loss(x, preds)
-                grads = compute_grad(L, self.params)
-                self.update_params(lr, grads)
+                learnable_grads = compute_grad(L, self.learnable_params)
+                self.update_params(lr, learnable_grads)
             total = 0
             for i in range(int(0), int(images)):
                 x = torch.stack([torch.as_tensor(X[int(i)])])
                 pred = self(x)
                 total = total + self.loss(x, pred)
-            print((total / images))
+            epoch_loss = (total / images)
+            losses[int(epoch)] = epoch_loss
+            print(epoch_loss)
+        return losses
 
     def update_params(self, lr, learnable_grads):
         this = self
@@ -157,10 +161,10 @@ class DEQ(nn.Module):
 # === Program ===
 torch.manual_seed(int(0))
 print(print(DEVICE))
-W = rand_array(16, 16, 0.01)
-U = rand_array(784, 16, 0.02)
-b = zeros2d(1, 16)
-Wo = rand_array(16, 784, 0.05)
+W = rand_array(8, 8, 0.01)
+U = rand_array(784, 8, 0.02)
+b = zeros2d(1, 8)
+Wo = rand_array(8, 784, 0.05)
 bo = zeros2d(1, 784)
 deq = DEQ(W, U, b, Wo, bo).to(DEVICE)
 images = 50
@@ -171,7 +175,7 @@ loss_before = deq.loss(x0, recon_before)
 print(print(loss_before))
 epochs = 1
 lr = 0.001
-print(deq.train(X, epochs, lr, images))
+losses = deq.train(X, epochs, lr, images)
 recon_after = deq(x0)
 loss_after = deq.loss(x0, recon_after)
 print(print(loss_after))
