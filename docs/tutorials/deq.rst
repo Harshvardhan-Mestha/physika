@@ -2,11 +2,12 @@ Deep Equilibrium Models
 =======================
 
 This tutorial introduces Deep Equilibrium Models (DEQs) and shows how to implement one in Physika.
+The representational power of a network is its mathematical ability to capture, express, and approximate the complex patterns and functions hidden inside data. Broadly, deeper networks have more representational capacity, which is what lets a deep model represent something like an image.
 Suppose we want the representational power of a very deep network, but without paying to store and backpropagate through every one of its layers.
-A Deep Equilibrium Model gives us exactly this: instead of stacking many distinct layers, it applies **one** layer over and over until its output stops changing, and treats that settled value as the network's answer.
-That settled value is called an *equilibrium* (or *fixed point*), and finding it turns the forward pass of a neural network into a **root-finding problem**.
+A Deep Equilibrium Model gives us exactly this, because instead of stacking many distinct layers it applies one layer over and over until its output stops changing, and treats that settled (or steady state) value as the network's answer.
+That steady state value is called an *equilibrium* (or *fixed point*), and finding it turns the forward pass of a neural network into a root-finding problem.
 
-By the end of this tutorial you will understand what a fixed point is, why a weight-tied "infinite depth" network can be summarized by one, how to solve for that fixed point with a quasi-Newton root finder, and how the whole thing is differentiated in Physika.
+By the end of this tutorial you will understand what a fixed point is, why a weight-tied "infinite depth" network can be summarized by one, how to solve for that fixed point with a quasi-Newton root finder, and how Physika differentiates the loss back to the parameters through that fixed point for training.
 You will then train a small DEQ that reconstructs handwritten digits from the MNIST dataset.
 This tutorial is based on Bai, Kolter, and Koltun's *Deep Equilibrium Models* paper [BaiDEQ2019]_ and their Deep Implicit Layers tutorial [ImplicitLayers]_.
 
@@ -21,16 +22,16 @@ A conventional deep network computes a sequence of hidden states, one per layer:
 
 Each layer :math:`f_t` usually has its own parameters, and the memory needed for training grows with the number of layers :math:`T`, because every intermediate :math:`h_t` must be kept for the backward pass.
 
-A Deep Equilibrium Model makes two changes.
-First, it **ties the weights**: every layer is the *same* function :math:`f(\cdot, x, \theta)`.
-Second, it asks what happens as the depth goes to infinity.
+A Deep Equilibrium Model is built from two ideas that work together.
+First, it ties the weights, so every layer is the same function :math:`f(\cdot, x, \theta)`.
+Second, it asks what happens as the depth goes to infinity, that is apply same layer infinite times.
 If repeatedly applying :math:`f` drives the hidden state toward a value that no longer changes, then that limiting value :math:`h^\star` satisfies
 
 .. math::
     h^\star = f(h^\star, x, \theta).
 
-A point that maps to itself under :math:`f` is called a **fixed point** (or **equilibrium point**).
-Rather than run :math:`f` a fixed number of times, a DEQ directly *solves* for this fixed point.
+A point that maps to itself under :math:`f` is called a fixed point.
+Rather than run :math:`f` a fixed number of times, a DEQ directly *solves* for this fixed point, once the DEQ is able to do so we can say that the model has reached the equilibrium.
 The infinite stack of identical layers is replaced by a single object, the equilibrium, and the entire forward pass becomes "find the :math:`h^\star` that :math:`f` leaves unchanged" [BaiDEQ2019]_.
 
 .. figure:: /_static/tutorial_files/deq/deq.jpg
@@ -47,7 +48,7 @@ We work with three objects throughout.
 
 The **input** :math:`x \in \mathbb{R}^{d}` is the data the network is given (for us, a flattened :math:`28 \times 28 = 784`-dimensional MNIST image, a vector of shape :math:`(d,)`).
 
-The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 16`).
+The **hidden state** :math:`h \in \mathbb{R}^{n}` is the internal representation the network refines, a vector of shape :math:`(n,)` (here :math:`n = 8`).
 
 The **parameters** :math:`\theta` collect every learnable weight and bias in the layer.
 In our model :math:`\theta = \{W, U, b, W_o, b_o\}`.
@@ -68,18 +69,49 @@ In Physika the layer is written exactly as the equation reads:
     def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
         return tanh(h @ W + x @ U + b)
 
+.. note::
+
+   Here :math:`f` is a single fully connected layer for simplicity.
+   If we want more depth inside :math:`f`, we can pull a layer out into a reusable
+   ``linear`` (a weight-and-bias with a :math:`\tanh`, like the fully connected
+   network's layer):
+
+   .. code-block:: text
+
+       def tanh(a: ℝ[p,q]): ℝ[p,q]:
+           num: ℝ[p,q] = exp(a) - exp(-a)
+           denom: ℝ[p,q] = exp(a) + exp(-a)
+           return num / denom
+
+       def linear(z: ℝ[1,n], W: ℝ[n,n], b: ℝ[1,n]): ℝ[1,n]:
+           return tanh(z @ W + b)
+
+   and stack it. A two-layer :math:`f` folds the input in once, then applies
+   ``linear`` twice, each with its own weights:
+
+   .. code-block:: text
+
+       def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
+           h1: ℝ[1,n] = linear(h + x @ U, W1, b1)   # first layer folds in the input x
+           h2: ℝ[1,n] = linear(h1, W2, b2)
+           return h2
+
 
 Fixed Points and the Banach Fixed-Point Theorem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-A **fixed point** of a function :math:`g` is any input that the function returns unchanged: a point :math:`h^\star` with :math:`g(h^\star) = h^\star`.
+A **fixed point** of a function :math:`g` is any input that the function returns unchanged,
+
+.. math::
+    g(h^\star) = h^\star.
+
+(For instance, :math:`0` is a fixed point of :math:`\tanh`, since :math:`\tanh(0) = 0`.)
 For a DEQ, the function is :math:`f(\cdot, x, \theta)` with :math:`x` and :math:`\theta` held fixed, and the equilibrium is a fixed point of that map.
 
-Two questions immediately arise: does such a point exist, and is it unique?
-The **Banach fixed-point theorem** (also called the contraction mapping theorem) answers both under one condition [Wikipedia_Banach]_.
+For the equilibrium to be well defined, such a point must exist and be unique, existence gives the iteration a target to converge to, and uniqueness makes that target independent of where the solver starts.
+The **Banach fixed-point theorem** answers both under one condition [Wikipedia_Banach]_.
 
-We first need the notion of a **contraction**.
-A map :math:`f` is a contraction if it always brings pairs of points *closer together* by at least a constant factor: there exists a **Lipschitz constant** :math:`L < 1` such that
+**Contraction**: :math:`f` is said to be a contraction if it always brings pairs of points closer together by at least a constant factor there exists a Lipschitz constant :math:`L < 1` such that
 
 .. math::
     \left\| f(a, x, \theta) - f(b, x, \theta) \right\| \le L \, \left\| a - b \right\| \qquad \text{for all } a, b,
@@ -87,10 +119,10 @@ A map :math:`f` is a contraction if it always brings pairs of points *closer tog
 where :math:`\|\cdot\|` denotes the Euclidean distance between two vectors.
 Intuitively, applying a contraction shrinks distances, so it cannot spread points apart.
 
-The Banach fixed-point theorem states that a contraction on a complete space has **exactly one** fixed point :math:`h^\star`, and that the simple iteration :math:`h_{k+1} = f(h_k, x, \theta)` converges to it from any starting point.
-This repeated-application scheme is called **Picard iteration**, and its error shrinks geometrically as :math:`L^k`.
+The Banach fixed-point theorem states that a contraction on a complete space has exactly one fixed point :math:`h^\star`, and that the simple iteration :math:`h_{k+1} = f(h_k, x, \theta)` converges to it from any starting point.
+This repeated-application scheme is called Picard iteration, and its error shrinks geometrically as :math:`L^k`.
 
-The theorem is what guarantees that "an infinitely deep weight-tied network" is a meaningful object: as long as :math:`f` is a contraction, the equilibrium exists and is unique.
+The theorem is what DEQ principally works on, as long as :math:`f` (the layer) is a contraction, the equilibrium exists and is unique.
 Our layer makes this easy to arrange. The slope of :math:`\tanh` is :math:`\tanh'(z) = 1 - \tanh^2(z)`, which is largest at :math:`z = 0` where it equals :math:`1` and is smaller everywhere else, so :math:`\tanh` is *1-Lipschitz*: it never stretches a distance. We can see this by computing the slope directly:
 
 .. code-block:: text
@@ -99,23 +131,95 @@ Our layer makes this easy to arrange. The slope of :math:`\tanh` is :math:`\tanh
     slope: ℝ[1,n] = 1.0 - t * t        # 1 - tanh^2, always in (0, 1]
 
 Because :math:`\tanh` never stretches and :math:`W` only rescales, the layer satisfies :math:`\|f(a,x,\theta) - f(b,x,\theta)\| \le \|W\|\,\|a - b\|`, so keeping :math:`\|W\|` below :math:`1` makes :math:`f` a contraction.
-This is why the weights are initialized small: it keeps the equilibrium unique and the solver well behaved. (The same :math:`1 - \tanh^2` slope returns below, where it builds the Jacobian.)
+This is why the weights are initialized small, which keeps the equilibrium unique and the solver well behaved. (The same :math:`1 - \tanh^2` slope returns below, where it builds the Jacobian.)
+
+Solving a Linear System in Physika
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The forward solver we build next repeatedly needs to solve a linear system :math:`A x = b` for :math:`x`, so we set that tool up first.
+Physika has no built-in linear solver, so we write a small ``linsolve`` using **Gaussian elimination**, used in this tutorial. 
+
+The idea is to place the right-hand side next to the matrix, forming the augmented block :math:`[\,A \mid b\,]`, and then apply row operations that reduce the left block to the identity.
+The right column is carried along and becomes the solution:
+
+.. math::
+    [\,A \mid b\,] \;\xrightarrow{\ \text{row ops}\ }\; [\,I \mid x\,].
+
+Concretely, we sweep the columns one at a time. For column :math:`i` we take the diagonal entry as the pivot, divide that row by the pivot so the pivot becomes :math:`1`, and subtract the right multiple of the pivot row from every other row so the column is zero elsewhere.
+A final back-substitution reads the solution off the reduced system.
+Note that this returns the solution vector :math:`x` directly; it never forms :math:`A^{-1}`, which would be more work and less stable.
+
+Two small points make the elimination fit the language cleanly.
+First, ``eye`` builds the identity by filling a zero matrix and setting the diagonal entries to :math:`1` in a loop.
+Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_next``) rather than writing into it in place, which keeps automatic differentiation happy when the solve is differentiated during training.
+
+.. code-block:: text
+
+    def eye(n: ℝ): ℝ[n, n]:
+        I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
+        for i:ℕ(n):
+            I[i, i] = 1.0
+        return I
+
+    def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
+        aug: ℝ[8, 9] = zeros2d(8, 9)
+        for i:ℕ(8):
+            for c:ℕ(8):
+                aug[i, c] = A[i, c]
+            aug[i, 8] = b[i]
+        for i:ℕ(8):
+            piv = zeros1d(9)
+            for c:ℕ(9):
+                piv[c] = aug[i, c]
+            aug_next = zeros2d(8, 9)
+            for r:ℕ(8):
+                if r == i:
+                    for c:ℕ(9):
+                        aug_next[r, c] = piv[c] / piv[i]
+                else:
+                    fac = aug[r, i] / piv[i]
+                    for c:ℕ(9):
+                        aug_next[r, c] = aug[r, c] - fac * piv[c]
+            aug = aug_next
+        x: ℝ[8] = zeros1d(8)
+        for i:ℕ(8):
+            idx = 7 - i
+            total = aug[idx, 8]
+            for j:ℕ(idx + 1, 8):
+                total = total - aug[idx, j] * x[j]
+            x_next = zeros1d(8)
+            for c:ℕ(8):
+                if c == idx:
+                    x_next[c] = total / aug[idx, idx]
+                else:
+                    x_next[c] = x[c]
+            x = x_next
+        return x
+
+We use this in the DEQ forward pass in the next section, where each Newton step solves :math:`J \delta = g` for the update :math:`\delta`. Writing the solver in plain Physika costs nothing at training time, because Physika is fully differentiable and backpropagates straight through the elimination.
 
 Solving for the Equilibrium (the Forward Pass)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Finding :math:`h^\star` is a **root-finding problem**.
-Define the *residual*, the amount by which a point fails to be a fixed point:
+Finding :math:`h^\star` is a root-finding problem, meaning we look for the point where a function equals zero. That function is the *residual*, the amount by which a point fails to be a fixed point:
 
 .. math::
     g(h) = f(h, x, \theta) - h,
 
 so that the equilibrium is exactly the value that makes the residual vanish, :math:`g(h^\star) = 0`.
-In Physika the residual is the expression it looks like:
+A root of the residual is therefore an equilibrium of the layer, the settled hidden state the DEQ treats as its answer.
+In Physika the residual is the expression it looks like, where ``h_star`` is the current iterate:
 
 .. code-block:: text
 
-    g = this.f(this.h_star, x) - this.h_star      # residual  g(h) = f(h, x) - h
+    def zeros2d(n: ℝ, m: ℝ): ℝ[n, m]:
+        return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
+
+    def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
+        return tanh(h @ W + x @ U + b)
+
+    h_star: ℝ[1,n] = zeros2d(1, n)        
+    g = f(h_star, x) - h_star             
 
 **Newton's method** solves :math:`g(h) = 0` by repeatedly replacing :math:`g` with its straight-line approximation.
 Near the current iterate :math:`h_k`, the residual is well approximated by its first-order Taylor expansion,
@@ -129,34 +233,30 @@ Newton picks the step :math:`\delta` that makes this linear approximation zero, 
 .. math::
     J\,\delta = g(h_k), \qquad h_{k+1} = h_k - \delta.
 
-The important thing to notice is that the first equation is a **linear system** :math:`J\delta = g`: each Newton step *solves a linear system*, it does not form a matrix inverse.
-Solving :math:`J\delta = g` is both cheaper and more numerically stable than building :math:`J^{-1}` and multiplying, and it is exactly what the linear-solve helper in the next section does.
+The important thing to notice is that the first equation is a linear system :math:`J\delta = g`, so each Newton step solves a linear system rather than forming a matrix inverse.
+Solving :math:`J\delta = g` is both cheaper and more numerically stable than building :math:`J^{-1}` and multiplying, and it is what the ``linsolve`` helper above does.
 
 We still need :math:`J = \partial g/\partial h`. Since :math:`g = f - h`, differentiating the :math:`-h` term gives a :math:`-I`, so :math:`J = \partial f/\partial h - I`.
-The layer Jacobian :math:`\partial f/\partial h` has a closed form here, no autodiff or finite differences required. Differentiating :math:`f = \tanh(hW + xU + b)` brings down the slope :math:`\tanh'(z) = 1 - f^2` on each unit, times the linear weight, so :math:`\partial f/\partial h` is :math:`W` with each column scaled by :math:`1 - f^2`:
+The layer Jacobian :math:`\partial f/\partial h` can be computed directly from an explicit formula. Differentiating :math:`f = \tanh(hW + xU + b)` brings down the slope :math:`\tanh'(z) = 1 - f^2` on each unit, times the linear weight, so :math:`\partial f/\partial h` is :math:`W` with each column scaled by :math:`1 - f^2`:
 
 .. math::
     \frac{\partial f}{\partial h} = W \odot (1 - f^2), \qquad J = \frac{\partial f}{\partial h} - I.
 
-That column scaling is the ``df_dh`` helper, one entry at a time:
+That column scaling is the ``df_dh`` helper, implemented in Physika below:
 
 .. code-block:: text
 
     def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
-        J: ℝ[n,n] = zeros2d(16, 16)
-        for c:ℕ(16):
-            for r:ℕ(16):
-                J[r, c] = W[r, c] * tanh_prime[0, c]
-        return J
+        return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
 With :math:`J` in hand, one Newton step is the linear solve followed by the update, which maps line for line onto the math (:math:`\delta` solves :math:`J\delta = g`, then :math:`h \leftarrow h - \delta`):
 
 .. code-block:: text
 
-    delta = linsolve(J, g[0])                     # solve  J δ = g
-    this.h_star = this.h_star - [delta]           # update h ← h - δ
+    delta = linsolve(J, g[0])          
+    h_star = h_star - [delta]          
 
-The variant used in the code is the simplest quasi-Newton scheme, the **chord method** (modified Newton): it forms :math:`J` *once* at the starting point :math:`h_0 = 0` and reuses it for every step, rather than rebuilding it each iteration.
+The variant used in the code is the simplest quasi-Newton scheme, the **chord method** (modified Newton), which forms :math:`J` *once* at the starting point :math:`h_0 = 0` and reuses it for every step, rather than rebuilding it each iteration.
 Freezing :math:`J` is what makes it quasi-Newton, and it is justified here because the layer is a contraction, so the equilibrium stays close to :math:`h_0` and one Jacobian is a good enough model for all the steps.
 For comparison, the simplest solver of all is Picard iteration :math:`h_{k+1} = f(h_k, x, \theta)`, which needs no Jacobian at all but converges only linearly.
 
@@ -164,7 +264,7 @@ Differentiating Through the Equilibrium (the Backward Pass)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 To train the model we need the gradient of the loss with respect to the parameters, which requires the gradient of the equilibrium :math:`h^\star` with respect to :math:`\theta`.
-Differentiating the equilibrium condition itself gives a closed form, called **implicit differentiation** [BaiDEQ2019]_.
+Differentiating the equilibrium condition itself gives us an exact solution, called implicit differentiation [BaiDEQ2019]_.
 Starting from :math:`h^\star = f(h^\star, x, \theta)` and differentiating both sides with respect to :math:`\theta` (the right-hand side needs the chain rule because :math:`h^\star` depends on :math:`\theta`):
 
 .. math::
@@ -200,20 +300,16 @@ Using :math:`\tanh' = 1 - \tanh^2` and :math:`h^\star = \tanh(\cdot)`, the layer
     = -\bigl(w(1 - {h^\star}^2) - 1\bigr)^{-1}\,(1 - {h^\star}^2).
 
 With :math:`w = 0.5` and :math:`h^\star = 0.4`, the layer derivative is :math:`0.42`, so the factor :math:`-(0.42 - 1)^{-1} = 1.724` multiplies the one-layer gradient :math:`0.84`, giving :math:`\partial h^\star/\partial b \approx 1.448`.
-The :math:`-(\partial f/\partial h^\star - I)^{-1}` term is what an *infinitely deep* network contributes: in the scalar case it is the geometric series :math:`1 + f' + f'^2 + \cdots = (1 - f')^{-1}`, the summed influence of the layer applied over and over.
+The :math:`-(\partial f/\partial h^\star - I)^{-1}` term is what an infinitely deep network contributes: in the scalar case it is the geometric series :math:`1 + f' + f'^2 + \cdots = (1 - f')^{-1}`, the summed influence of the layer applied over and over.
 
 Differentiability in Physika
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A Physika class compiles to a differentiable module, and ``grad()`` backpropagates through its methods with automatic differentiation.
-We do not write a custom backward pass. Because the forward solver is an ordinary loop, ``grad(L, this.params)`` differentiates straight through the unrolled quasi-Newton iteration and into every parameter.
-
-At first glance this looks like it would give the wrong answer, since the solver uses a Jacobian, so surely that has to be handled specially?
-It does not, and the reason is the boxed formula above.
-The frozen Jacobian :math:`J` acts only as a *preconditioner*: it changes how fast the iteration converges, not where it converges to.
-When the iteration has settled on :math:`h^\star`, the gradient of the unrolled loop satisfies the same linear relation as the implicit-differentiation result, and the preconditioner cancels.
-So autograd through the unrolled solve recovers the exact implicit gradient :math:`-\frac{\partial \mathcal{L}}{\partial h^\star}(\partial f/\partial h^\star - I)^{-1}\frac{\partial f}{\partial \theta}` without our ever coding that formula.
-The only cost is memory: the unrolled version stores its iterates, whereas a hand-written backward using the closed form would not.
+We do not write a custom backward pass. Because the forward solver is an ordinary loop, Physika differentiates straight through the unrolled quasi-Newton iteration and into every parameter.
+The frozen Jacobian :math:`J`, changes how fast the iteration converges, not where it converges to, we freeze it since recomputing it at every step is expensive computationally.
+When the iteration has settled on :math:`h^\star`, the gradient of the unrolled loop satisfies the same linear relation as the implicit-differentiation result, and the Jacobian cancels out.
+So autograd through the unrolled solve recovers the exact implicit gradient :math:`-\frac{\partial \mathcal{L}}{\partial h^\star}(\partial f/\partial h^\star - I)^{-1}\frac{\partial f}{\partial \theta}` without writing a function that implements the backward pass.
 
 
 Methods for Solving the Fixed Point
@@ -233,117 +329,78 @@ This is not an exhaustive list, but below are the solvers most commonly used, fr
 3. Quasi-Newton
     Quasi-Newton methods keep Newton's fast convergence while avoiding a fresh exact Jacobian every step.
     The implementation below uses the simplest such scheme, the **chord method**, which forms the residual Jacobian once at the initial iterate and reuses it for every step.
-    Production DEQs use stronger variants such as **Broyden's method**, which maintains a low-rank running approximation of the Jacobian, and **Anderson acceleration**, which forms each iterate as a least-squares-optimal mix of the last few [BaiDEQ2019]_.
+    Production DEQs use stronger variants such as **Broyden's method** [Wikipedia_Broyden]_, which maintains a low-rank running approximation of the Jacobian, and **Anderson acceleration** [Wikipedia_Anderson]_, which forms each iterate as a least-squares-optimal mix of the last few [BaiDEQ2019]_.
 
-Regardless of which solver is chosen, the backward pass is unchanged: the implicit-differentiation formula depends only on the converged :math:`h^\star`, so improving the solver never changes how gradients are computed.
-
-.. figure:: /_static/tutorial_files/deq/chord_method.png
-   :alt: Left, the residual g(h) with parallel fixed-slope chord steps marching to the equilibrium; right, distance to the equilibrium versus iteration for Picard, chord, and Newton on a log scale.
-   :align: center
-   :width: 750px
-
-   **Figure 2.** The chord (frozen-Jacobian quasi-Newton) solve on a scalar residual :math:`g(h) = f(h,x) - h`. *Left:* every step follows a line of the same slope :math:`g'(h_0)`, computed once at the start, down to the axis, so the steps are parallel and march :math:`h_0 \to h_1 \to \cdots \to h^\star`. *Right:* distance to the equilibrium per iteration; chord (frozen :math:`J`) is much faster than Picard and nearly as fast as Newton, at the cost of a single Jacobian build. A far start :math:`h_0` is used here only to separate the steps visually; the DEQ starts from :math:`h_0 = 0`, already close to :math:`h^\star` because the layer is a contraction.
-
-Solving a Linear System in Physika
-----------------------------------
-
-Each Newton step is the linear system :math:`J \delta = g`, so we need a way to **solve** :math:`A x = b` for :math:`x`.
-Physika has no built-in linear solver, so we write a small ``linsolve`` using **Gaussian elimination**, the same primitive used in the Physika linear-solve tutorials.
-
-The idea is to place the right-hand side next to the matrix, forming the augmented block :math:`[\,A \mid b\,]`, and then apply row operations that reduce the left block to the identity.
-The right column is carried along and becomes the solution:
-
-.. math::
-    [\,A \mid b\,] \;\xrightarrow{\ \text{row ops}\ }\; [\,I \mid x\,].
-
-Concretely, we sweep the columns one at a time. For column :math:`i` we take the diagonal entry as the **pivot**, divide that row by the pivot so the pivot becomes :math:`1`, and subtract the right multiple of the pivot row from every other row so the column is zero elsewhere.
-A final **back-substitution** reads the solution off the reduced system.
-Note that this returns the solution vector :math:`x` directly; it never forms :math:`A^{-1}`, which would be more work and less stable.
-
-Two small points make the elimination fit the language cleanly.
-First, ``eye`` builds the identity by filling a zero matrix and setting the diagonal entries to :math:`1` in a loop.
-Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_next``) rather than writing into it in place, which keeps automatic differentiation happy when the solve is differentiated during training.
-
-.. code-block:: text
-
-    def eye(n: ℝ): ℝ[n, n]:
-        I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
-        for i:ℕ(n):
-            I[i, i] = 1.0
-        return I
-
-    def linsolve(A: ℝ[16, 16], b: ℝ[16]): ℝ[16]:
-        aug: ℝ[16, 17] = zeros2d(16, 17)
-        for i:ℕ(16):
-            for c:ℕ(16):
-                aug[i, c] = A[i, c]
-            aug[i, 16] = b[i]
-        for i:ℕ(16):
-            piv = zeros1d(17)
-            for c:ℕ(17):
-                piv[c] = aug[i, c]
-            aug_next = zeros2d(16, 17)
-            for r:ℕ(16):
-                if r == i:
-                    for c:ℕ(17):
-                        aug_next[r, c] = piv[c] / piv[i]
-                else:
-                    fac = aug[r, i] / piv[i]
-                    for c:ℕ(17):
-                        aug_next[r, c] = aug[r, c] - fac * piv[c]
-            aug = aug_next
-        x: ℝ[16] = zeros1d(16)
-        for i:ℕ(16):
-            idx = 15 - i
-            total = aug[idx, 16]
-            for j:ℕ(idx + 1, 16):
-                total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(16)
-            for c:ℕ(16):
-                if c == idx:
-                    x_next[c] = total / aug[idx, idx]
-                else:
-                    x_next[c] = x[c]
-            x = x_next
-        return x
+Regardless of which solver is chosen, the backward pass is unchanged: the implicit-differentiation formula depends only on the converged :math:`h^\star`, so improving the solver never changes how gradients are computed, but it affects how fast the layer converges to the equilibrium.
 
 
 Implementing a DEQ in Physika
 -----------------------------
 
 We now have every piece: the layer :math:`f`, its Jacobian ``df_dh``, and the linear solve ``linsolve``.
-The DEQ class puts them together.
-It is an autoencoding DEQ: an MNIST image :math:`x` drives the layer to an equilibrium hidden state :math:`h^\star`, and a linear decoder maps :math:`h^\star` back to a :math:`784`-dimensional reconstruction :math:`\hat{x}`, trained to match :math:`x`.
+We now put the pieces together.
+It is an autoencoding DEQ, where an MNIST image :math:`x` drives the layer to an equilibrium hidden state :math:`h^\star`, and a linear decoder maps :math:`h^\star` back to a :math:`784`-dimensional reconstruction :math:`\hat{x}`, trained to match :math:`x`.
 
-The ``equilibrium`` method is where the pieces meet. It computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2`, freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(16)``, then runs the chord iteration: residual, linear solve, update.
+The ``equilibrium`` routine is where the pieces meet. It computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2`, freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(8)``, then runs the chord iteration: residual, linear solve, update.
 
 .. code-block:: text
 
     def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
         num_solver_steps: ℕ = 3
-        this.h_star = zeros2d(1, 16)
-        f_h: ℝ[1,n] = this.f(this.h_star, x)
+        h_star: ℝ[1,n] = zeros2d(1, 8)
+        f_h: ℝ[1,n] = f(h_star, x)
         tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(16)
+        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
         for k:ℕ(num_solver_steps):
-            g = this.f(this.h_star, x) - this.h_star
+            g = f(h_star, x) - h_star
             delta = linsolve(J, g[0])
-            this.h_star = this.h_star - [delta]
-        return this.h_star
+            h_star = h_star - [delta]
+        return h_star
 
-The **call operator** ``λ`` runs the solver and decodes the equilibrium into data space, :math:`\hat{x} = h^\star W_o + b_o`, and the **loss** is the squared reconstruction error :math:`\|\,x - \hat{x}\,\|^2` against the input image itself:
+Three steps are enough because the contraction leaves :math:`h_0 = 0` already close to :math:`h^\star`, so the frozen-Jacobian iteration reaches the equilibrium in a handful of steps.
+
+The call operator ``λ`` runs the solver and decodes the equilibrium into data space, :math:`\hat{x} = h^\star W_o + b_o`, and the loss is the squared reconstruction error :math:`\|\,x - \hat{x}\,\|^2` against the input image itself:
 
 .. code-block:: text
 
     def λ(x: ℝ[1,d]) → ℝ[1,d]:
-        h_star: ℝ[1,n] = this.equilibrium(x)
+        h_star: ℝ[1,n] = equilibrium(x)
         return h_star @ Wo + bo
 
     def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
         diff: ℝ[1,784] = target - x_hat
         return sum(diff * diff)
 
-Training is ordinary gradient descent: ``train`` computes the loss and calls ``grad(L, this.params)``, which differentiates through the unrolled solver as explained above, then updates the parameters.
+**Training** - the code block below contains the train loop and its helper functions:
+
+.. code-block:: text
+    def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+            loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
+            for epoch:ℕ(epochs):
+                for i:ℕ(images):
+                    x: ℝ[1,d] = [X[i]]
+                    preds = this(x)
+                    L = this.loss(x, preds)
+                    learnable_grads = grad(L, this.learnable_params)
+                    this.update_params(lr, learnable_grads)
+                total = 0
+                for i:ℕ(images):
+                    x: ℝ[1,d] = [X[i]]
+                    pred = this(x)
+                    total += this.loss(x, pred)
+                epoch_loss = total/images
+                loss[epoch] = epoch_loss
+                print(epoch_loss)
+            return loss
+        def update_params(lr: ℝ, learnable_grads: ℝ[m]):
+            this.W = this.W - lr * learnable_grads[0]
+            this.U = this.U - lr * learnable_grads[1]
+            this.b = this.b - lr * learnable_grads[2]
+            this.Wo = this.Wo - lr * learnable_grads[3]
+            this.bo = this.bo - lr * learnable_grads[4]
+
+In the `train()` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad()``, and the parameters are updated with a simple gradient descent step.
+Even though the `update_params` method uses simple gradient descent, more sophisticated optimizers can be used as well.
 
 .. note::
 
@@ -354,6 +411,8 @@ Training a DEQ on the MNIST Dataset
 -----------------------------------
 
 This is the complete program for training the DEQ on MNIST. 
+
+**Dataset** - MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
 ``load_mnist`` returns the first ``n`` MNIST digits as a ``ℝ[n, 784]`` array of flattened images. It is not a built-in; add this helper to ``physika/runtime.py``:
 
 .. code-block:: python
@@ -364,6 +423,32 @@ This is the complete program for training the DEQ on MNIST.
         mnist = datasets.MNIST(root="./data", train=True, download=True, transform=transforms.ToTensor())
         return torch.stack([mnist[i][0].view(784) for i in range(int(n))]).to(DEVICE)
 
+**Plotting the training curve** - To plot the training curve, add this helper to ``physika/runtime.py``:
+.. code-block:: python
+    def plot_deq_losses(losses, before, after):
+        import matplotlib.pyplot as plt
+        losses = losses.cpu().detach().numpy()
+        before = before.cpu().detach().numpy()
+        after = after.cpu().detach().numpy()
+
+        epochs = range(1, len(losses) + 1)
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5),
+                                    gridspec_kw={"width_ratios": [1.4, 1]})
+
+        ax1.plot(epochs, losses)
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss")
+        ax1.set_title("DEQ Training Curve\nLoss by epoch, 10 images of MNIST, 20 epochs")
+        ax1.set_xticks(epochs)
+
+        ax2.bar(["Before training", "After 20 epochs"], [float(before), float(after)], width=0.5)
+        ax2.set_ylabel("Reconstruction loss")
+        ax2.set_title("DEQ Reconstruction Loss\nImage 0, before vs. after 20 epochs of training")
+
+        plt.tight_layout()
+        plt.savefig("deq_train_plot.png", dpi=300, bbox_inches="tight")
+        plt.show()
 
 Full Code
 ---------
@@ -394,34 +479,34 @@ Full Code
     def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
         return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
-    def linsolve(A: ℝ[16, 16], b: ℝ[16]): ℝ[16]:
-        aug: ℝ[16, 17] = zeros2d(16, 17)
-        for i:ℕ(16):
-            for c:ℕ(16):
+    def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
+        aug: ℝ[8, 9] = zeros2d(8, 9)
+        for i:ℕ(8):
+            for c:ℕ(8):
                 aug[i, c] = A[i, c]
-            aug[i, 16] = b[i]
-        for i:ℕ(16):
-            piv = zeros1d(17)
-            for c:ℕ(17):
+            aug[i, 8] = b[i]
+        for i:ℕ(8):
+            piv = zeros1d(9)
+            for c:ℕ(9):
                 piv[c] = aug[i, c]
-            aug_next = zeros2d(16, 17)
-            for r:ℕ(16):
+            aug_next = zeros2d(8, 9)
+            for r:ℕ(8):
                 if r == i:
-                    for c:ℕ(17):
+                    for c:ℕ(9):
                         aug_next[r, c] = piv[c] / piv[i]
                 else:
                     fac = aug[r, i] / piv[i]
-                    for c:ℕ(17):
+                    for c:ℕ(9):
                         aug_next[r, c] = aug[r, c] - fac * piv[c]
             aug = aug_next
-        x: ℝ[16] = zeros1d(16)
-        for i:ℕ(16):
-            idx = 15 - i
-            total = aug[idx, 16]
-            for j:ℕ(idx + 1, 16):
+        x: ℝ[8] = zeros1d(8)
+        for i:ℕ(8):
+            idx = 7 - i
+            total = aug[idx, 8]
+            for j:ℕ(idx + 1, 8):
                 total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(16)
-            for c:ℕ(16):
+            x_next = zeros1d(8)
+            for c:ℕ(8):
                 if c == idx:
                     x_next[c] = total / aug[idx, idx]
                 else:
@@ -435,10 +520,10 @@ Full Code
             return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
             num_solver_steps: ℕ = 3
-            this.h_star = zeros2d(1, 16)
+            this.h_star = zeros2d(1, 8)
             f_h: ℝ[1,n] = this.f(this.h_star, x)
             tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(16)
+            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
             for k:ℕ(num_solver_steps):
                 g = this.f(this.h_star, x) - this.h_star
                 delta = linsolve(J, g[0])
@@ -450,20 +535,24 @@ Full Code
         def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
             diff: ℝ[1,784] = target - x_hat
             return sum(diff * diff)
-        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ):
+        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+            loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
                 for i:ℕ(images):
                     x: ℝ[1,d] = [X[i]]
                     preds = this(x)
                     L = this.loss(x, preds)
-                    grads = grad(L, this.params)
-                    this.update_params(lr, grads)
+                    learnable_grads = grad(L, this.learnable_params)
+                    this.update_params(lr, learnable_grads)
                 total = 0
                 for i:ℕ(images):
                     x: ℝ[1,d] = [X[i]]
                     pred = this(x)
                     total += this.loss(x, pred)
-                print(total / images)
+                epoch_loss = total/images
+                loss[epoch] = epoch_loss
+                print(epoch_loss)
+            return loss
         def update_params(lr: ℝ, learnable_grads: ℝ[m]):
             this.W = this.W - lr * learnable_grads[0]
             this.U = this.U - lr * learnable_grads[1]
@@ -472,15 +561,16 @@ Full Code
             this.bo = this.bo - lr * learnable_grads[4]
 
     print(DEVICE)
-    W: ℝ[16,16] = rand_array(16, 16, 0.01)
-    U: ℝ[784,16] = rand_array(784, 16, 0.02)
-    b: ℝ[1,16] = zeros2d(1, 16)
-    Wo: ℝ[16,784] = rand_array(16, 784, 0.05)
+    W: ℝ[8,8] = rand_array(8, 8, 0.01)
+    U: ℝ[784,8] = rand_array(784, 8, 0.02)
+    b: ℝ[1,8] = zeros2d(1, 8)
+    Wo: ℝ[8,784] = rand_array(8, 784, 0.05)
     bo: ℝ[1,784] = zeros2d(1, 784)
     deq: DEQ = DEQ(W, U, b, Wo, bo)
 
     images: ℝ = 50
-    X: ℝ[50, 784] = load_mnist(images)      
+    # X: ℝ[50, 784] = rand_array(50, 784, 1.0)      
+    X: ℝ[50, 784] = load_mnist(images) 
 
     x0: ℝ[1,784] = [X[0]]
     recon_before: ℝ[1,784] = deq(x0)
@@ -489,16 +579,17 @@ Full Code
 
     epochs: ℕ = 20
     lr: ℝ = 0.001
-    deq.train(X, epochs, lr, images)
+    losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
     recon_after: ℝ[1,784] = deq(x0)
     loss_after: ℝ = deq.loss(x0, recon_after)
     print(loss_after)
+    plot_deq_losses(losses, loss_before, loss_after)
 
 
 Training plots
 --------------
 
-After running the code above (~90 minutes), you should see the average reconstruction loss decrease over epochs as the model learns to encode and decode the digits through its equilibrium state.
+After running the code above (~30 minutes), you should see the average reconstruction loss decrease over epochs as the model learns to encode and decode the digits through its equilibrium state.
 
 .. figure:: /_static/tutorial_files/deq/deq_train_plot.png
    :alt:
@@ -520,3 +611,11 @@ References
 .. [Wikipedia_Banach] Wikipedia,
     *Banach fixed-point theorem*.
     https://en.wikipedia.org/wiki/Banach_fixed-point_theorem
+
+.. [Wikipedia_Broyden] Wikipedia,
+    *Broyden's method*.
+    https://en.wikipedia.org/wiki/Broyden%27s_method
+
+.. [Wikipedia_Anderson] Wikipedia,
+    *Anderson acceleration*.
+    https://en.wikipedia.org/wiki/Anderson_acceleration
