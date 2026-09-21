@@ -127,21 +127,21 @@ class RealNVP(nn.Module):
         X = torch.as_tensor(X, device=DEVICE).float()
         lr = torch.as_tensor(lr, device=DEVICE).float()
         len_train = torch.as_tensor(len_train, device=DEVICE).float()
-        loss = torch.stack([(i * 0) for _fi_i in range(int(epochs)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+        losses = torch.stack([(i * 0) for _fi_i in range(int(epochs)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
         for epoch in range(int(0), int(epochs)):
             for i in range(int(0), int(len_train)):
                 L = self.loss(X[int(i)])
-                grads = compute_grad(L, self.params)
-                self.update_params(lr, grads)
+                learnable_grads = compute_grad(L, self.learnable_params)
+                self.update_params(lr, learnable_grads)
             total = 0
             for i in range(int(0), int(len_train)):
                 total = total + self.loss(X[int(i)])
             epoch_loss = (total / len_train)
-            loss[int(epoch)] = epoch_loss
+            losses[int(epoch)] = epoch_loss
             print(epoch_loss)
             bits = self.evaluate(epoch_loss, len_train)
             print(bits)
-        return loss
+        return losses
 
     def test(self, Y, len_test):
         this = self
