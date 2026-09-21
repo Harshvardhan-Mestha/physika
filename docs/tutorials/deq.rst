@@ -377,7 +377,7 @@ The call operator ``λ`` runs the solver and decodes the equilibrium into data s
         return sum(diff * diff)
 
 
-To train the model we need a DEQ class (shown as a snippet below), which we instantiate allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W``) with ``this.`` 
+To train the model we need a DEQ class (shown as a snippet below), which we use to instantiate a model allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W``) with ``this.`` representing the instance of the class.
 When calling the class (``this(x)``), runs the ``λ`` method, so ``this(x)`` is equivalent to ``λ(x)``. The above sections are implemented as individual methods, for simplicity.
 The Full Code section contains the complete Physika code, which can be run as-is.
 
@@ -431,8 +431,8 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
 
 
-In the ``train()`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad()``, and the parameters are updated with a simple gradient descent step.
-For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad()`` returns a list of gradients in the same order as the parameters.
+In the ``train`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad``, and the parameters are updated with a simple gradient descent step.
+For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
 The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
 
 So when training the model the entire training looks like the snippet below, shown is a simplified example on dummy data:
