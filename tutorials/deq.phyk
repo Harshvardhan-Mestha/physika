@@ -79,7 +79,7 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
         diff: ℝ[1,784] = target - x_hat
         return sum(diff * diff)
     def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
-        loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
+        losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
         for epoch:ℕ(epochs):
             for i:ℕ(images):
                 x: ℝ[1,d] = [X[i]]
@@ -93,9 +93,9 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
                 pred = this(x)
                 total += this.loss(x, pred)
             epoch_loss = total/images
-            loss[epoch] = epoch_loss
+            losses[epoch] = epoch_loss
             print(epoch_loss)
-        return loss
+        return losses
     def update_params(lr: ℝ, learnable_grads: ℝ[m]):
         this.W = this.W - lr * learnable_grads[0]
         this.U = this.U - lr * learnable_grads[1]
@@ -121,7 +121,8 @@ recon_before: ℝ[1,784] = deq(x0)
 loss_before: ℝ = deq.loss(x0, recon_before)
 print(loss_before)
 
-epochs: ℕ = 20
+# Set to 20 for recreating run, set to 1 for CI    
+epochs: ℕ = 1
 lr: ℝ = 0.001
 losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
 recon_after: ℝ[1,784] = deq(x0)
