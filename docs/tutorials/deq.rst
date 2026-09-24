@@ -135,74 +135,18 @@ This is why the weights are initialized small, which keeps the equilibrium uniqu
 Solving a Linear System in Physika
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The forward solver we build next repeatedly needs to solve a linear system :math:`A x = b` for :math:`x`, so we set that tool up first.
-Physika has no built-in linear solver, so we write a small ``linsolve`` using **Gaussian elimination**, used in this tutorial. 
-
-The idea is to place the right-hand side next to the matrix, forming the augmented block :math:`[\,A \mid b\,]`, and then apply row operations that reduce the left block to the identity.
-The right column is carried along and becomes the solution:
-
-.. math::
-    [\,A \mid b\,] \;\xrightarrow{\ \text{row ops}\ }\; [\,I \mid x\,].
-
-Concretely, we sweep the columns one at a time. For column :math:`i` we take the diagonal entry as the pivot, divide that row by the pivot so the pivot becomes :math:`1`, and subtract the right multiple of the pivot row from every other row so the column is zero elsewhere.
-A final back-substitution reads the solution off the reduced system.
-Note that this returns the solution vector :math:`x` directly; it never forms :math:`A^{-1}`, which would be more work and less stable.
-
-Two small points make the elimination fit the language cleanly.
-First, ``eye`` builds the identity by filling a zero matrix and setting the diagonal entries to :math:`1` in a loop.
-Second, each column sweep rebuilds the augmented matrix as a fresh array (``aug_next``) rather than writing into it in place, which keeps automatic differentiation happy when the solve is differentiated during training.
-This is implemented in Physika, with the snippet below:
+In the DEQ forward pass in the next section, each Newton step solves the linear system :math:`J \delta = g` for the update :math:`\delta`. 
+We import the ``gaussian_solve`` function (along with it's helper functions) which solves a linear system of equations using **Gaussian elimination**, implemented in the `Gaussian Elimination Tutorial <https://physika.readthedocs.io/en/latest/tutorials/linear_solve_gaussian_elimination.html>`__.
+For more details on importing Physika functions, please refer to the documentation on `import statements <https://physika.readthedocs.io/en/latest/language.html#import-statements>`__.
 
 .. code-block:: text
+    
+    from tutorials.linear_solve_gaussian_elimination import gaussian_solve 
+    from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array
 
-    def eye(n: ℝ): ℝ[n, n]:
-        I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
-        for i:ℕ(n):
-            I[i, i] = 1.0
-        return I
 
-    def zeros2d(n: ℝ, m: ℝ): ℝ[n, m]:
-        return for i:ℕ(n) → for j:ℕ(m) → j * 0.0
+Since Physika is fully differentiable, the ``gaussian_solve`` is differentiable as well.
 
-    def zeros1d(k: ℝ): ℝ[k]:
-        return for i:ℕ(k) → i * 0.0
-
-    def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
-        aug: ℝ[8, 9] = zeros2d(8, 9)
-        for i:ℕ(8):
-            for c:ℕ(8):
-                aug[i, c] = A[i, c]
-            aug[i, 8] = b[i]
-        for i:ℕ(8):
-            piv = zeros1d(9)
-            for c:ℕ(9):
-                piv[c] = aug[i, c]
-            aug_next = zeros2d(8, 9)
-            for r:ℕ(8):
-                if r == i:
-                    for c:ℕ(9):
-                        aug_next[r, c] = piv[c] / piv[i]
-                else:
-                    fac = aug[r, i] / piv[i]
-                    for c:ℕ(9):
-                        aug_next[r, c] = aug[r, c] - fac * piv[c]
-            aug = aug_next
-        x: ℝ[8] = zeros1d(8)
-        for i:ℕ(8):
-            idx = 7 - i
-            total = aug[idx, 8]
-            for j:ℕ(idx + 1, 8):
-                total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(8)
-            for c:ℕ(8):
-                if c == idx:
-                    x_next[c] = total / aug[idx, idx]
-                else:
-                    x_next[c] = x[c]
-            x = x_next
-        return x
-
-We use this in the DEQ forward pass in the next section, where each Newton step solves :math:`J \delta = g` for the update :math:`\delta`. Writing the solver in plain Physika costs nothing at training time, because Physika is fully differentiable and backpropagates straight through the elimination.
 
 Solving for the Equilibrium (the Forward Pass)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -689,4 +633,8 @@ References
 
 .. [Wikipedia_Anderson] Wikipedia,
     *Anderson acceleration*.
+    https://en.wikipedia.org/wiki/Anderson_acceleration
+
+.. [Wikipedia_GaussianElimination] Wikipedia,
+    *Gaussian Elimination*.
     https://en.wikipedia.org/wiki/Anderson_acceleration
