@@ -1,4 +1,7 @@
 physika.seed(0)
+from tutorials.linear_solve_gaussian_elimination import gaussian_solve 
+from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array
+
 def tanh(a: ℝ[p,q]): ℝ[p,q]:
     num: ℝ[p,q] = exp(a) - exp(-a)
     denom: ℝ[p,q] = exp(a) + exp(-a)
@@ -22,41 +25,6 @@ def eye(n: ℝ): ℝ[n, n]:
 def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
     return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
-def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
-    aug: ℝ[8, 9] = zeros2d(8, 9)
-    for i:ℕ(8):
-        for c:ℕ(8):
-            aug[i, c] = A[i, c]
-        aug[i, 8] = b[i]
-    for i:ℕ(8):
-        piv = zeros1d(9)
-        for c:ℕ(9):
-            piv[c] = aug[i, c]
-        aug_next = zeros2d(8, 9)
-        for r:ℕ(8):
-            if r == i:
-                for c:ℕ(9):
-                    aug_next[r, c] = piv[c] / piv[i]
-            else:
-                fac = aug[r, i] / piv[i]
-                for c:ℕ(9):
-                    aug_next[r, c] = aug[r, c] - fac * piv[c]
-        aug = aug_next
-    x: ℝ[8] = zeros1d(8)
-    for i:ℕ(8):
-        idx = 7 - i
-        total = aug[idx, 8]
-        for j:ℕ(idx + 1, 8):
-            total = total - aug[idx, j] * x[j]
-        x_next = zeros1d(8)
-        for c:ℕ(8):
-            if c == idx:
-                x_next[c] = total / aug[idx, idx]
-            else:
-                x_next[c] = x[c]
-        x = x_next
-    return x
-
 class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
     h_star: ℝ[1,n]
     def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
@@ -69,7 +37,7 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
         J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
         for k:ℕ(num_solver_steps):
             g = this.f(this.h_star, x) - this.h_star
-            delta = linsolve(J, g[0])
+            delta = gaussian_solve(J, g[0])
             this.h_star = this.h_star - [delta]
         return this.h_star
     def λ(x: ℝ[1,d]) → ℝ[1,d]:
