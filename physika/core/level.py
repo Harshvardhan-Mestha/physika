@@ -137,7 +137,7 @@ class LMVar:
     """
     Universe metavariable.
 
-    Used when `elaborator` doesnt yet know the specific level of a term.
+    Used when `elaborator` doesn't yet know the specific level of a term.
     A metavariable placeholder will be created (LMVar(id='m1')) and later
     unified with a concrete level (e.g.,LSucc(LZero())) during elaboration.
 
