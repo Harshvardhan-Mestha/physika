@@ -637,4 +637,4 @@ References
 
 .. [Wikipedia_GaussianElimination] Wikipedia,
     *Gaussian Elimination*.
-    https://en.wikipedia.org/wiki/Anderson_acceleration
+    https://en.wikipedia.org/wiki/Gaussian_elimination
