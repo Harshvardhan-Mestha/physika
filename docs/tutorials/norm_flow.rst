@@ -1,13 +1,12 @@
 Normalizing Flows
 =======================
 
-This tutorial is to introduce Normalizing Flow models and how to implement them in Physika.
-Suppose we are given samples from an unknown data distribution (e.g. images of handwritten digits) and we want to both estimate how likely any given point is under that distribution and generate new samples that resemble the data. This is the problem of generative modeling with exact density estimation, and it is the problem a normalizing flow like RealNVP is designed to solve.
+This tutorial introduces the concept of Normalizing Flow models and how to implement them in Physika.
 Normalizing Flows are a class of generative models that allow for density estimation and sampling by transforming a simple base distribution into a more complex target distribution.
-RealNVP (Real-valued Non-Volume Preserving transformations) is a Normalizing Flow model.
-It works by splitting the input into two halves: one half stays fixed, while the other is scaled and shifted using neural networks conditioned on the fixed half.
-Stacking several of these layers produces a transformation that is easy to invert and whose likelihood is easy to compute,
-the two properties that make Normalizing Flows useful for both generating data and estimating density.
+Say we are given samples from an unknown data distribution, and we want to estimate how likely any given point is under that distribution and generate new samples. 
+A normalizing flow like RealNVP(Real-valued Non-Volume Preserving transformations) is designed to tackle such a problem.
+RealNVP works by splitting the input into two halves, one of which stays fixed, while the other is scaled and shifted with neural networks conditioned on the fixed half.
+Stacking several of these layers produces a transformation that is easy to invert and whose likelihood is easy to compute, allowing us to generate data by estimating the input's density.
 
 By the end of this tutorial, you will learn how to train a RealNVP Normalizing Flow model for density estimation and image generation.
 This tutorial is based on the Deep Generative Models (CS236) course notes [DeepGenModels]_.
@@ -20,8 +19,8 @@ Normalizing Flows are a class of generative models that transform a simple base 
 The key idea is to model the probability density function of the target distribution by applying a sequence of **bijective mappings** to the base distribution.
 
 A bijective mapping is a function :math:`f: \mathbb{R}^N \to \mathbb{R}^N` that is both *injective* (distinct inputs always produce distinct outputs, i.e. :math:`f(a) = f(b) \implies a = b`) and *surjective* (every point in the output space is the image of some input) [Wikipedia_Bijection]_.
-Equivalently, a bijective function establishes a one-to-one correspondence between input and output spaces, so it is guaranteed to have a well-defined inverse :math:`f^{-1}` satisfying :math:`f^{-1}(f(z)) = z`.
-This invertibility is essential for normalizing flows: it lets us map freely between the simple base distribution and the complex target, and crucially it allows us to compute exact probability densities via the change-of-variables formula [DeepGenModels]_.
+Equivalently, a bijective function establishes a one-to-one correspondence between the input and output spaces, so it is guaranteed to have a well-defined inverse :math:`f^{-1}` satisfying :math:`f^{-1}(f(z)) = z`.
+This invertibility allows us to map freely between the simple base distribution and the complex target, and more importantly it allows us to compute exact probability densities via the change-of-variables formula [DeepGenModels]_.
 
 .. figure:: /_static/tutorial_files/norm_flow/norm_flow_basic.png
    :alt: Illustration of a normalizing flow transforming a simple Gaussian distribution into a complex multi-modal distribution through a sequence of invertible mappings.
@@ -34,40 +33,40 @@ Setup and Notation
 ^^^^^^^^^^^^^^^^^^
 
 Let's consider a probability distribution :math:`\mathcal{P}` over :math:`\mathbb{R}^N`.
-We represent this distribution by its **probability density function** :math:`p: \mathbb{R}^N \to \mathbb{R}`, a function that takes a point :math:`x \in \mathbb{R}^N` (a vector of shape :math:`(N,)`) and returns a non-negative real number such that the integral over any region gives the probability of landing in that region.
+We represent it with a **probability density function** :math:`p: \mathbb{R}^N \to \mathbb{R}`, a function that takes a point :math:`x \in \mathbb{R}^N` (a vector of shape :math:`(N,)`) and outputs a non-negative number such that the area under it over any region in the distribution gives us the probability of the point landing in that region.
 
-We begin by sampling from a base distribution:
+We sample from a base distribution:
 
 .. math::
     z \sim \mathcal{N}(\mu, \Sigma)
 
-Here, :math:`\mu \in \mathbb{R}^N` is the **mean vector** (the center of the distribution) and :math:`\Sigma \in \mathbb{R}^{N \times N}` is the **covariance matrix** (encoding variance along each axis and correlations between dimensions).
-The notation :math:`z \sim \mathcal{N}(\mu, \Sigma)` means that :math:`z` is a random variable drawn from this :math:`N`-dimensional Gaussian.
+Here, :math:`\mu \in \mathbb{R}^N` denotes the mean vector and :math:`\Sigma \in \mathbb{R}^{N \times N}` denotes the covariance matrix.
+The notation :math:`z \sim \mathcal{N}(\mu, \Sigma)` means that :math:`z` is a random variable drawn from this :math:`N`-dimensional Gaussian distribution.
 
-In Physika, this sampling can be expressed as:
+In Physika, this sampling is written as:
 
 .. code-block:: text
 
     μ : ℝ[N] = ...    # mean vector
     z : ℝ[N] ~ for i : ℕ(N) → ε : ℝ ~ Normal(μ, σ)
 
-We then define an invertible transformation :math:`f: \mathbb{R}^N \to \mathbb{R}^N` that maps latent samples to the data space:
+We then define an invertible transformation :math:`f: \mathbb{R}^N \to \mathbb{R}^N` below:
 
 .. math::
     x = f(z)
 
-where :math:`f` is a bijective function (and therefore invertible), taking a latent vector :math:`z` of shape :math:`(N,)` and producing a data-space vector :math:`x` of the same shape :math:`(N,)`.
+where :math:`f` is a bijective function (and therefore invertible), taking in a latent vector :math:`z` of shape :math:`(N,)` and yielding a vector :math:`x` of the same shape :math:`(N,)`.
 
 Change of Variables
 ^^^^^^^^^^^^^^^^^^^
 
 Because :math:`f` is invertible, we can express the **probability density of** :math:`x` using the **change-of-variables formula**.
-The density :math:`p(x)` tells us how likely a particular point :math:`x \in \mathbb{R}^N` is under the transformed distribution its input is a vector of shape :math:`(N,)` and its output is a non-negative scalar:
+The density :math:`p(x)` tells us how likely a point :math:`x \in \mathbb{R}^N` is under the transformed distribution with the input being a vector of shape :math:`(N,)` and the output is a non-negative real number.
 
 .. math::
     p(x) = p_z\!\left(f^{-1}(x)\right) \left| \det \mathcal{J}\!\left(f^{-1}\right) \right|
 
-The term :math:`p_z(f^{-1}(x))` appears because we first map :math:`x` back to the latent space to get :math:`z = f^{-1}(x)`, then look up the density of that :math:`z` in the known distribution :math:`p_z` (e.g. a standard Gaussian).
+The term :math:`p_z(f^{-1}(x))` first maps :math:`x` back to the latent space to get :math:`z = f^{-1}(x)`, then look up the density of that :math:`z` in the known distribution :math:`p_z` (e.g. a standard Gaussian).
 Since :math:`f` is bijective, every :math:`x` maps to exactly one such :math:`z`, so the density is always well-defined.
 
 The factor :math:`\left| \det \mathcal{J}(f^{-1}) \right|` is the **absolute value of the determinant of the Jacobian matrix** of :math:`f^{-1}`.
@@ -81,13 +80,14 @@ The **Jacobian matrix** :math:`\mathcal{J}(f^{-1}) \in \mathbb{R}^{N \times N}` 
 
 Its **determinant** is a single scalar that measures how the transformation locally scales volumes.
 If :math:`|\det \mathcal{J}| > 1` the mapping stretches a region of space, spreading probability over a larger volume (decreasing density); if :math:`|\det \mathcal{J}| < 1` it compresses a region (increasing density).
-Taking the absolute value ensures the density remains non-negative regardless of whether the transformation reverses orientation.
+Taking the absolute value ensures the density remains non-negative whether or not the transformation reverses orientation.
 
 Composing Transformations
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 A single bijective function may not be expressive enough to model complex distributions.
-The power of normalizing flows comes from *composing* multiple simple bijective transformations into a chain, where each individual transformation is easy to invert and has a tractable Jacobian determinant, but the overall composition can represent highly flexible mappings:
+The power of normalizing flows comes from *composing* multiple simple bijective transformations into a chain, where each individual transformation is easy to invert and has a Jacobian determinant that is easy to compute.
+This chaining of transformations is what allows us to model complex distributions.
 
 .. math::
     z &\sim \mathcal{N}(\mu, \Sigma) \\
@@ -131,8 +131,8 @@ General Derivation of the Loss in a Normalizing Flow
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 **Maximum likelihood estimation (MLE)** [Wikipedia_MLE]_ finds the model parameters :math:`\theta` that make the observed data as likely as possible under the model.
-For a dataset :math:`\{x_1, \ldots, x_M\}`, this means choosing :math:`\theta` to maximize the **likelihood** :math:`\prod_{j=1}^{M} p_\theta(x_j)`, where :math:`p_\theta(x_j)` is the probability the model assigns to the :math:`j`-th data point and :math:`\prod` denotes the product over all :math:`M` samples.
-Multiplying many probabilities together is numerically awkward, so we take the logarithm, which turns the product into a sum. Maximizing this **log-likelihood** is the same as minimizing its negative, which gives us a loss to minimize: 
+For a given dataset :math:`\{x_1, \ldots, x_M\}`, this means choosing :math:`\theta` to maximize the **likelihood** :math:`\prod_{j=1}^{M} p_\theta(x_j)`, where :math:`p_\theta(x_j)` is the probability the model assigns to the :math:`j`-th data point and :math:`\prod` denotes the product over all :math:`M` samples.
+Instead of multiplying many probabilities together, we take the logarithm turning the product into a sum. Maximizing this **log-likelihood** is the same as minimizing its negative, which gives us a loss function to minimize: 
 
 .. math::
     \mathcal{L}(\theta) = -\sum_{j=1}^{M} \log p_\theta(x_j)
@@ -140,7 +140,7 @@ Multiplying many probabilities together is numerically awkward, so we take the l
 We train a normalizing flow by **maximum likelihood estimation**: we adjust the parameters of the transformations :math:`f_1, \ldots, f_K` so that the model assigns high probability to observed data.
 
 The **log-likelihood** is the logarithm of the probability the model assigns to a data point :math:`x`.
-Working with log-probabilities instead of raw probabilities is standard practice for two reasons: it converts products into sums (which are numerically stabler and cheaper to compute), and it avoids the underflow that occurs when multiplying many small probabilities together.
+Working with log-probabilities instead of raw probabilities as it converts products into sums (stabler and cheaper to compute versus products).
 
 Applying the logarithm to the change-of-variables formula gives the loss (negative log-likelihood):
 
@@ -172,22 +172,22 @@ The ``loss`` method below is derived from the chain of transformations ``f1``, `
         return -log_pz(z) - log(abs(det(J2))) - log(abs(det(J1)))
 
 The first term, :math:`-\log p_z[\cdot]`, penalizes mappings that send data points to low-density regions of the base distribution.
-The second term, :math:`-\sum_i \log |\det \mathcal{J}(f_i^{-1})|`, penalizes transformations that excessively compress volume (which would artificially inflate density).
-We use the negative sign because we *minimize* a loss function during training, which is equivalent to *maximizing* the log-likelihood.
+The second, :math:`-\sum_i \log |\det \mathcal{J}(f_i^{-1})|`, penalizes transformations that excessively compress volume.
+The negative sign gives us a loss function to minimize during training.
 
 For deep-network-based flows, it is also important that the Jacobian determinant of each :math:`f_i` is efficient to compute ideally :math:`O(N)` rather than the :math:`O(N^3)` cost of a general determinant which motivates architectural choices such as coupling layers and autoregressive transforms.
 
-In Physika, this entire pipeline is differentiable end-to-end.
-Gradients flow through all transformations :math:`f_1, \ldots, f_K` and the log-density computation automatically, so ``grad()`` can backpropagate from the loss to every learnable parameter.
+In Physika, this is fully differentiable.
+Gradients flow through the chain of transformations :math:`f_1, \ldots, f_K` and the log-density computation automatically, so the ``grad()`` function backpropagate gradients from the loss to every learnable parameter.
 Sampling operations such as ``z: ℝ[N] ~ 𝒩(μ, Σ)`` are also differentiable.
 Physika follows the `Stochastic Computation Graphs (SCG) framework <https://physika.readthedocs.io/en/latest/elf.html#id2>`__, using the reparameterization trick for continuous distributions (Normal, Uniform, Beta, Gamma) by default.
-Normally, sampling is a non-differentiable operation because the random draw has no gradient with respect to the distribution's parameters.
-The reparameterization trick sidesteps this by expressing the sample as a deterministic function of the parameters plus independent noise: :math:`z = \mu + \sigma \cdot \varepsilon` where :math:`\varepsilon \sim \mathcal{N}(0, I)` is fixed random noise.
-Since :math:`z` is now a smooth function of :math:`\mu` and :math:`\sigma`, gradients flow through :math:`z` to these parameters as with any other computation, without special handling by the user.
+Sampling usually is a non-differentiable operation since the random draw has no gradient with respect to the distribution's parameters.
+The reparameterization trick ensures differentiability by expressing the sample as a deterministic function of the parameters independent noise added: :math:`z = \mu + \sigma \cdot \varepsilon` where :math:`\varepsilon \sim \mathcal{N}(0, I)` is fixed random noise.
+Since :math:`z` is now a differentiable function of :math:`\mu` and :math:`\sigma`, gradients can flow through :math:`z` to these parameters as with any other computation, without special handling by the user.
 
 A more detailed treatment of the change of variables formula and of flow-based models in general can be found in [DeepGenModels]_ and [Weng2018]_.
 The above derivation is a general formulation of the loss in a normalizing flow, and it applies to any choice of invertible transformations :math:`f_1, \ldots, f_K`.
-This crucial to understand before proceeding to the next section, as we derive the complete loss function for RealNVP in more detail, where we substitute the series of transformations into this general expression.
+This is crucial to understand before proceeding to the next section, as we derive the complete loss function for RealNVP in more detail, where we substitute the series of transformations into this general expression.
 
 
 Types of Normalizing Flows
@@ -211,7 +211,7 @@ This is not an exhaustive list, but below are some popular methods.
 
         - The learned parameters :math:`u,w,b` and :math:`h`, need to be restricted to be invertible.
         - Computing :math:`f^{-1}(z)` could be difficult analytically.
-          Because :math:`h` is typically a nonlinear activation (e.g. :math:`\tanh`), inverting :math:`f(z) = z + u\,h(w^\top z + b)` for :math:`z` requires solving an implicit nonlinear equation there is generally no closed-form expression, and iterative numerical methods (e.g. fixed-point iteration) must be used instead.
+          If :math:`h` is a nonlinear activation (e.g. :math:`\tanh`), inverting :math:`f(z) = z + u\,h(w^\top z + b)` for :math:`z` requires solving an implicit nonlinear equation there is generally no closed-form expression, and iterative numerical methods (e.g. fixed-point iteration) must be used instead.
 
     The below two methods address this by ensuring that the forward and inverse is easy to compute.
 
@@ -370,6 +370,64 @@ This is not an exhaustive list, but below are some popular methods.
     In Physika, sampling operations in flows are differentiable via the `SCG framework <https://physika.readthedocs.io/en/latest/elf.html#id2>`__: continuous distributions use the reparameterization trick, discrete ones use score function estimators.
     Gradients propagate through the full chain of transformations automatically.
 
+Dataset
+-------
+
+MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
+``create_dataset`` returns the first ``total_dataset_size`` MNIST digits as a list containing a train an test split, where ``train_test_split`` is the percentage of images to keep in the train split. 
+In our case ``train_test_split = 80, total_dataset_size = 200`` so 160 images in the train split, and 40 in the test split.
+
+.. note::
+   ``create_dataset`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
+
+    .. code-block:: python
+
+        def create_dataset(train_test_split = 80, total_dataset_size = 200):
+            import torch
+            from torchvision import datasets, transforms
+
+            transform = transforms.ToTensor()
+
+            mnist = datasets.MNIST(
+                root="./data",
+                train=True,
+                download=True,
+                transform=transform
+            )
+
+            X = []
+            y = []
+
+            # take first total_dataset_size samples
+            for i in range(total_dataset_size):
+                image, label = mnist[i]
+
+                # [1,28,28] -> [28,28]
+                image = image.squeeze(0)
+                X.append(image)
+                y.append(label)
+            X = torch.stack(X)
+            y = torch.tensor(y)
+
+            # split index
+            split_index = int(
+                (train_test_split / 100.0)
+                *
+                total_dataset_size
+            )
+
+            # train split
+            X_train = X[:split_index]
+            y_train = y[:split_index]
+
+            # test split
+            X_test = X[split_index:]
+            y_test = y[split_index:]
+            train_data = [X_train, y_train]
+            test_data = [X_test, y_test]
+            return [train_data, test_data]
+
+
 Training a RealNVP Normalizing Flow in Physika
 ----------------------------------------------
 
@@ -447,13 +505,15 @@ In the ``train`` method, the loss is computed for each image, the gradient of th
 For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
 The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
 
-So when training the model the entire training looks like the snippet below, shown is a simplified example on dummy data:
+So when training the model the entire training looks like the snippet below:
 
 .. code-block:: text
 
-    # dummy data all zeros
-    train_X: ℝ[160, 28, 28] = for i:ℕ(160) -> for j:ℕ(28) -> for k:ℕ(28) -> k*0
-    test_X: ℝ[40, 28, 28] = for i:ℕ(40) -> for j:ℕ(28) -> for k:ℕ(28) -> k*0
+    dataset = create_dataset(80, 200)
+    train_dataset = dataset[0]
+    test_dataset = dataset[1]
+    train_X: ℝ[160, 28, 28] = train_dataset[0]
+    test_X: ℝ[40, 28, 28] = test_dataset[0]
     len_train: ℝ, len_test: ℝ = 160, 40
 
     # Dimensions
@@ -484,70 +544,13 @@ If this goes below 8, the model has learnt a representation of the train data wh
 The ``test`` method lets us compute the loss on the test set, which is useful to check if the model is able to generalize to unseen data.
 The ``sample`` method lets us generate new samples from the model. In this image is a flat vector of size 784, which can be reshaped to a square image.
 
-Dataset
--------
-
-MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
-``create_dataset`` returns the first ``total_dataset_size`` MNIST digits as a list containing a train an test split, where ``train_test_split`` is the percentage of images to keep in the train split. 
-In our case ``train_test_split = 80, total_dataset_size = 200`` so 160 images in the train split, and 40 in the test split.
-
-.. note::
-   ``create_dataset`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
-
-    .. code-block:: python
-
-        def create_dataset(train_test_split = 80, total_dataset_size = 200):
-            import torch
-            from torchvision import datasets, transforms
-
-            transform = transforms.ToTensor()
-
-            mnist = datasets.MNIST(
-                root="./data",
-                train=True,
-                download=True,
-                transform=transform
-            )
-
-            X = []
-            y = []
-
-            # take first total_dataset_size samples
-            for i in range(total_dataset_size):
-                image, label = mnist[i]
-
-                # [1,28,28] -> [28,28]
-                image = image.squeeze(0)
-                X.append(image)
-                y.append(label)
-            X = torch.stack(X)
-            y = torch.tensor(y)
-
-            # split index
-            split_index = int(
-                (train_test_split / 100.0)
-                *
-                total_dataset_size
-            )
-
-            # train split
-            X_train = X[:split_index]
-            y_train = y[:split_index]
-
-            # test split
-            X_test = X[split_index:]
-            y_test = y[split_index:]
-            train_data = [X_train, y_train]
-            test_data = [X_test, y_test]
-            return [train_data, test_data]
 
 Plotting Graphs
 ---------------
-Once training is done it is useful to visualize loss curves, as it tells us if the model is training properly. 
-The note below contains the helper to add in ``physika/runtime.py``.
+Once training is done it is useful to visualize metrics such as the loss and the bits per dimension for each epoch, as it tells us if the model is training properly. 
 
 .. note::
-   To plot the training curve and the bits per dimension, add the ``plot_losses_bits_per_dim`` helper to ``physika/runtime.py``:
+   ``plot_losses_bits_per_dim`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
 
     .. code-block:: python
 
