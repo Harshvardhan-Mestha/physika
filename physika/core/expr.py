@@ -154,6 +154,9 @@ class MVarId:
     id: str
 
     def __str__(self) -> str:
+        """
+        Return the string representation of the MVarId.
+        """
         return self.id
 
 
