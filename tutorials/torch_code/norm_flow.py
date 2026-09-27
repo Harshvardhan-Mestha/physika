@@ -74,8 +74,7 @@ class RealNVP(nn.Module):
     def coupling(self, x):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
-        x1 = x[:int(self.n)]
-        x2 = x[int(self.n):]
+        x1, x2 = x[:int(self.n)], x[int(self.n):]
         s = linear(relu(linear(x1, self.W1_s, self.b1_s)), self.W2_s, self.b2_s)
         m = linear(relu(linear(x1, self.W1_m, self.b1_m)), self.W2_m, self.b2_m)
         return torch.cat([x1, ((torch.exp(s if isinstance(s, torch.Tensor) else torch.tensor(float(s))) * x2) + m)])
@@ -83,8 +82,7 @@ class RealNVP(nn.Module):
     def coupling_inv(self, y):
         this = self
         y = torch.as_tensor(y, device=DEVICE).float()
-        y1 = y[:int(self.n)]
-        y2 = y[int(self.n):]
+        y1, y2 = y[:int(self.n)], y[int(self.n):]
         s = linear(relu(linear(y1, self.W1_s, self.b1_s)), self.W2_s, self.b2_s)
         m = linear(relu(linear(y1, self.W1_m, self.b1_m)), self.W2_m, self.b2_m)
         return torch.cat([y1, ((y2 - m) * torch.exp((-s) if isinstance((-s), torch.Tensor) else torch.tensor(float((-s)))))])
@@ -129,12 +127,11 @@ class RealNVP(nn.Module):
         len_train = torch.as_tensor(len_train, device=DEVICE).float()
         losses = torch.stack([(i * 0) for _fi_i in range(int(epochs)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
         for epoch in range(int(0), int(epochs)):
+            total = 0
             for i in range(int(0), int(len_train)):
                 L = self.loss(X[int(i)])
                 learnable_grads = compute_grad(L, self.learnable_params)
                 self.update_params(lr, learnable_grads)
-            total = 0
-            for i in range(int(0), int(len_train)):
                 total = total + self.loss(X[int(i)])
             epoch_loss = (total / len_train)
             losses[int(epoch)] = epoch_loss
@@ -180,9 +177,9 @@ class RealNVP(nn.Module):
 
 # === Program ===
 torch.manual_seed(int(0))
-train_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(160)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-test_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(40)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-len_train, len_test = 160, 40
+train_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(10)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+test_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(5)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+len_train, len_test = 10, 5
 d, h, n = 784, 128, 392
 s1, s2 = torch.sqrt((2.0 / n) if isinstance((2.0 / n), torch.Tensor) else torch.tensor(float((2.0 / n)))), (torch.sqrt((2.0 / h) if isinstance((2.0 / h), torch.Tensor) else torch.tensor(float((2.0 / h)))) * 0.01)
 W1_s, W1_m = torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]]), torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
@@ -202,7 +199,7 @@ lr = 0.00015
 X = train_flat
 Y = test_flat
 losses = realnvp.train(X, epochs, lr, len_train)
-print(print(losses))
+print(print(losses[int((-1))]))
 test_loss = realnvp.test(Y, len_test)
 print(print(test_loss))
 bits = realnvp.evaluate(test_loss, len_test)

@@ -249,8 +249,7 @@ This is not an exhaustive list, but below are some popular methods.
         .. code-block:: text
 
             def coupling(x: ℝ[d]): ℝ[d]:
-                x1: ℝ[n] = x[:n]
-                x2: ℝ[n] = x[n:]
+                x1, x2 = x[:n], x[n:]
                 s: ℝ[n] = linear(relu(linear(x1, W1_s, b1_s)), W2_s, b2_s)
                 m: ℝ[n] = linear(relu(linear(x1, W1_m, b1_m)), W2_m, b2_m)
                 return concat(x1, exp(s) * x2 + m)
@@ -265,8 +264,7 @@ This is not an exhaustive list, but below are some popular methods.
         .. code-block:: text
 
             def coupling_inv(y: ℝ[d]): ℝ[d]:
-                y1: ℝ[n] = y[:n]
-                y2: ℝ[n] = y[n:]
+                y1, y2 = x[:n], x[n:]
                 s: ℝ[n] = linear(relu(linear(y1, W1_s, b1_s)), W2_s, b2_s)
                 m: ℝ[n] = linear(relu(linear(y1, W1_m, b1_m)), W2_m, b2_m)
                 return concat(y1, (y2 - m) * exp(-s))
@@ -441,14 +439,12 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
     class RealNVP(W1_s: ℝ[h, n], b1_s: ℝ[h], W2_s: ℝ[n, h], b2_s: ℝ[n], W1_m: ℝ[h, n], b1_m: ℝ[h], W2_m: ℝ[n, h], b2_m: ℝ[n], n: ℕ, d: ℕ):
         def coupling(x: ℝ[d]): ℝ[d]:
-            x1: ℝ[n] = x[:this.n]
-            x2: ℝ[n] = x[this.n:]
+            x1, x2 = x[:this.n], x[this.n:]
             s: ℝ[n] = linear(relu(linear(x1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(x1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(x1, exp(s) * x2 + m)
         def coupling_inv(y: ℝ[d]): ℝ[d]:
-            y1: ℝ[n] = y[:this.n]
-            y2: ℝ[n] = y[this.n:]
+            y1, y2 = y[:this.n], y[this.n:]
             s: ℝ[n] = linear(relu(linear(y1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(y1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(y1, (y2 - m) * exp(-s))
@@ -471,13 +467,12 @@ The Full Code section contains the complete Physika code, which can be run as-is
         def train(X: ℝ[160, 784], epochs: ℕ, lr: ℝ, len_train: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch: ℕ(epochs):
+                total = 0
                 for i: ℕ(len_train):
                     L = this.loss(X[i])
                     learnable_grads = grad(L, this.learnable_params)
                     this.update_params(lr, learnable_grads)
-                total = 0
-                for i:ℕ(len_train):
-                    total += this.loss(X[i])
+                    total += this.loss(X[i])            
                 epoch_loss = total/len_train
                 losses[epoch] = epoch_loss
                 print(epoch_loss)
@@ -645,14 +640,12 @@ Additionally, since Normalizing flows only work with continuous distributions, w
     # RealNVP, two networks scale (s) and shift (m)
     class RealNVP(W1_s: ℝ[h, n], b1_s: ℝ[h], W2_s: ℝ[n, h], b2_s: ℝ[n], W1_m: ℝ[h, n], b1_m: ℝ[h], W2_m: ℝ[n, h], b2_m: ℝ[n], n: ℕ, d: ℕ):
         def coupling(x: ℝ[d]): ℝ[d]:
-            x1: ℝ[n] = x[:this.n]
-            x2: ℝ[n] = x[this.n:]
+            x1, x2 = x[:this.n], x[this.n:]
             s: ℝ[n] = linear(relu(linear(x1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(x1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(x1, exp(s) * x2 + m)
         def coupling_inv(y: ℝ[d]): ℝ[d]:
-            y1: ℝ[n] = y[:this.n]
-            y2: ℝ[n] = y[this.n:]
+            y1, y2 = y[:this.n], y[this.n:]
             s: ℝ[n] = linear(relu(linear(y1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(y1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(y1, (y2 - m) * exp(-s))
@@ -675,13 +668,12 @@ Additionally, since Normalizing flows only work with continuous distributions, w
         def train(X: ℝ[160, 784], epochs: ℕ, lr: ℝ, len_train: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch: ℕ(epochs):
+                total = 0
                 for i: ℕ(len_train):
                     L = this.loss(X[i])
                     learnable_grads = grad(L, this.learnable_params)
                     this.update_params(lr, learnable_grads)
-                total = 0
-                for i:ℕ(len_train):
-                    total += this.loss(X[i])
+                    total += this.loss(X[i])            
                 epoch_loss = total/len_train
                 losses[epoch] = epoch_loss
                 print(epoch_loss)
