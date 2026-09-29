@@ -210,7 +210,7 @@ class MOIModel(w1_0: ℝ[hidden, rbf_count], b1_0: ℝ[hidden, 1], w2_0: ℝ[1, 
             for rep:ℕ(1):
                 current_loss = this.loss_sample()
                 learnable_grads = grad(current_loss, this.learnable_params)
-                this.update(lr, learnable_grads)
+                this.update_params(lr, learnable_grads)
                 last_loss = current_loss
         return last_loss
     def evaluate() → ℝ:
@@ -222,6 +222,15 @@ class MOIModel(w1_0: ℝ[hidden, rbf_count], b1_0: ℝ[hidden, 1], w2_0: ℝ[1, 
                 total_loss = total_loss + current_loss
         result: ℝ = total_loss / eval_samples
         return result
+    def update_params(lr: ℝ, learnable_grads: ℝ[m]):
+        this.w1_0 = this.w1_0 - lr * learnable_grads[0]
+        this.b1_0 = this.b1_0 - lr * learnable_grads[1]
+        this.w2_0 = this.w2_0 - lr * learnable_grads[2]
+        this.b2_0 = this.b2_0 - lr * learnable_grads[3]
+        this.w1_2 = this.w1_2 - lr * learnable_grads[4]
+        this.b1_2 = this.b1_2 - lr * learnable_grads[5]
+        this.w2_2 = this.w2_2 - lr * learnable_grads[6]
+        this.b2_2 = this.b2_2 - lr * learnable_grads[7]
 
 # Ground Truth 
 def moi_tensor(points: ℝ[num_points, 3], masses: ℝ[num_points], center_idx: ℝ): ℝ[3, 3]:
