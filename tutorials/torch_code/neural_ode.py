@@ -140,16 +140,6 @@ class ODEFunc(nn.Module):
         out = ((self.W2 @ h1) + self.B2)
         return out
 
-    @property
-    def params(self):
-        return list(self.parameters())
-
-    def update(self, lr, grads):
-        with torch.no_grad():
-            for p, g in zip(self.parameters(), grads):
-                if g is not None:
-                    p -= lr * g
-
 class AdamOptimizer(nn.Module):
     def __init__(self, lr, beta1, beta2, eps, t, m, v):
         super().__init__()
@@ -175,16 +165,6 @@ class AdamOptimizer(nn.Module):
         v_hat = (self.v / (1.0 - (self.beta2 ** self.t)))
         param_new = (param - ((self.lr * m_hat) / (torch.sqrt(v_hat if isinstance(v_hat, torch.Tensor) else torch.tensor(float(v_hat))) + self.eps)))
         return param_new
-
-    @property
-    def params(self):
-        return list(self.parameters())
-
-    def update(self, lr, grads):
-        with torch.no_grad():
-            for p, g in zip(self.parameters(), grads):
-                if g is not None:
-                    p -= lr * g
 
 # === Program ===
 t_start, t_end, Δt = 0.0, 15.0, 0.1
