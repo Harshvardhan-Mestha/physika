@@ -7,11 +7,11 @@ def tanh(a: ℝ[p,q]): ℝ[p,q]:
     denom: ℝ[p,q] = exp(a) + exp(-a)
     return num / denom
 
-def sum_2d(arr: ℝ[1, n]): ℝ:
-    a: ℝ[n] = arr[0]
+def sum_2d(a: ℝ[p, q], p: ℕ, q: ℕ): ℝ:
     s: ℝ = 0.0
-    for i:ℕ(n):
-        s += a[i]
+    for i:ℕ(p):
+        for j:ℕ(q):
+            s += a[i, j]
     return s
 
 def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
@@ -51,7 +51,7 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: 
         return h_star @ Wo + bo
     def loss(target: ℝ[1,d], x_hat: ℝ[1,d]): ℝ:
         err: ℝ[1,d] = target - x_hat
-        return sum(err * err)
+        return sum_2d(err * err, 1, d)
     def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
         losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
         for epoch:ℕ(epochs):

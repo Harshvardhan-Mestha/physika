@@ -299,10 +299,17 @@ The Physika snippets in this section contain the implementation of the equilibri
         return h_star
 
 Three steps are sufficient as the contraction leaves :math:`h_0 = 0` already close to :math:`h^\star`, so the frozen-Jacobian iteration reaches the equilibrium in a handful of steps.
-
+The ``sum_2d`` function is a helper that sums all elements of a 2D array, and is used to compute the loss.
 The call operator ``λ`` runs the solver and decodes the equilibrium into data space, :math:`\hat{x} = h^\star W_o + b_o`, and the loss is the squared reconstruction error :math:`\|\,x - \hat{x}\,\|^2` against the input image itself:
 
 .. code-block:: text
+
+    def sum_2d(a: ℝ[p, q], p: ℕ, q: ℕ): ℝ:
+        s: ℝ = 0.0
+        for i:ℕ(p):
+            for j:ℕ(q):
+                s += a[i, j]
+        return s
 
     def λ(x: ℝ[1,d]) → ℝ[1,d]:
         h_star: ℝ[1,n] = equilibrium(x)
@@ -445,7 +452,7 @@ Once training is done, it is useful to visualize metrics such as the loss for ea
 
             ax2.bar(["Before training", "After 20 epochs"], [float(before), float(after)], width=0.5)
             ax2.set_ylabel("Reconstruction loss")
-            ax2.set_title("DEQ Reconstruction Loss\nImage 0, before vs. after 20 epochs of training")
+            ax2.set_title("DEQ Reconstruction Loss\n 50 images, avg. loss before vs. after 20 epochs")
 
             plt.tight_layout()
             plt.savefig("deq_train_plot.png", dpi=300, bbox_inches="tight")
