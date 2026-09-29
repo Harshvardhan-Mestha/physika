@@ -1,5 +1,10 @@
 import torch
-from physika.runtime import (random_complex, compl_mul1d, detach, detach_grad)
+from physika.runtime import (
+    random_complex,
+    compl_mul1d,
+    detach,
+    detach_grad,
+)
 from tests.conftest import type_errors, capture_output
 
 
