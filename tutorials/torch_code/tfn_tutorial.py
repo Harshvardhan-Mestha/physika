@@ -277,7 +277,7 @@ class MOIModel(nn.Module):
             for rep in range(int(0), int(1)):
                 current_loss = self.loss_sample()
                 learnable_grads = compute_grad(current_loss, self.learnable_params)
-                self.update(lr, learnable_grads)
+                self.update_params(lr, learnable_grads)
                 last_loss = current_loss
         return last_loss
 
@@ -292,15 +292,25 @@ class MOIModel(nn.Module):
         result = (total_loss / eval_samples)
         return result
 
-    @property
-    def params(self):
-        return list(self.parameters())
-
-    def update(self, lr, grads):
+    def update_params(self, lr, learnable_grads):
+        this = self
+        lr = torch.as_tensor(lr, device=DEVICE).float()
         with torch.no_grad():
-            for p, g in zip(self.parameters(), grads):
-                if g is not None:
-                    p -= lr * g
+            self.w1_0.copy_((self.w1_0 - (lr * learnable_grads[int(0)])))
+        with torch.no_grad():
+            self.b1_0.copy_((self.b1_0 - (lr * learnable_grads[int(1)])))
+        with torch.no_grad():
+            self.w2_0.copy_((self.w2_0 - (lr * learnable_grads[int(2)])))
+        with torch.no_grad():
+            self.b2_0.copy_((self.b2_0 - (lr * learnable_grads[int(3)])))
+        with torch.no_grad():
+            self.w1_2.copy_((self.w1_2 - (lr * learnable_grads[int(4)])))
+        with torch.no_grad():
+            self.b1_2.copy_((self.b1_2 - (lr * learnable_grads[int(5)])))
+        with torch.no_grad():
+            self.w2_2.copy_((self.w2_2 - (lr * learnable_grads[int(6)])))
+        with torch.no_grad():
+            self.b2_2.copy_((self.b2_2 - (lr * learnable_grads[int(7)])))
 
 # === Program ===
 num_points = 15
