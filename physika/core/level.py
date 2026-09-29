@@ -69,10 +69,10 @@ class LMax:
 
     Examples
     --------
-    >>> from physika.core.level import LZero, LSucc, mk_level_max
-    >>> mk_level_max(LSucc(LZero()), LZero())
-    LSucc(pred=LZero())
-    >>> mk_level_max(LSucc(LZero()), LSucc(LSucc(LZero())))
+    >>> from physika.core.level import LZero, LSucc, LMax
+    >>> LMax(LSucc(LZero()), LZero())
+    LMax(l1=LSucc(pred=LZero()), l2=LZero())
+    >>> LMax(LSucc(LZero()), LSucc(LSucc(LZero())))
     LMax(l1=LSucc(pred=LZero()), l2=LSucc(pred=LSucc(pred=LZero())))
     """
     l1: "Level"
@@ -137,7 +137,7 @@ class LMVar:
     """
     Universe metavariable.
 
-    Used when `elaborator` doesnt yet know the specific level of a term.
+    Used when `elaborator` doesn't yet know the specific level of a term.
     A metavariable placeholder will be created (LMVar(id='m1')) and later
     unified with a concrete level (e.g.,LSucc(LZero())) during elaboration.
 

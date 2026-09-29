@@ -154,6 +154,9 @@ class MVarId:
     id: str
 
     def __str__(self) -> str:
+        """
+        Return the string representation of the MVarId.
+        """
         return self.id
 
 
@@ -411,11 +414,11 @@ class Lam:
     Lambda abstraction.
 
     In a lambda expression (``fun (x : Nat) => x + 5``), a BVar(0) in
-    funciton body uses a de Bruijn index to point to a specific innermost binder.
+    function body uses a de Bruijn index to point to a specific innermost binder.
     ``BinderInfo`` associate to ``Lam`` determines how the argument is handled
     at call sites (``DEFAULT`` vs ``IMPLICIT``). DEFAULT binders must be explicitly
     supplied and IMPLICIT binders are inferred by the elaborator.
-    While this metadata is ised by the elaborator and allows the pretty printer to
+    While this metadata is used by the elaborator and allows the pretty printer to
     display specifc arguments, it does not alter core kernel procedures like type
     inference or reduction
 
