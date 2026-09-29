@@ -452,7 +452,7 @@ Once training is done, it is useful to visualize metrics such as the loss for ea
 
             ax2.bar(["Before training", "After 20 epochs"], [float(before), float(after)], width=0.5)
             ax2.set_ylabel("Reconstruction loss")
-            ax2.set_title("DEQ Reconstruction Loss\n 50 images, avg. loss before vs. after 20 epochs")
+            ax2.set_title("DEQ Reconstruction Loss\n 50 images of MNIST, Average loss before vs. after 20 epochs")
 
             plt.tight_layout()
             plt.savefig("deq_train_plot.png", dpi=300, bbox_inches="tight")
