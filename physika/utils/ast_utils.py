@@ -760,6 +760,14 @@ def ast_to_torch_expr(node: ASTNode,
             # Shape args must be ints
             return f"torch.zeros({', '.join(f'int({a})' for a in arg_strs)})"
 
+        elif func_name == "reshape":
+            # tensor node
+            x = arg_strs[0]
+            # dim node
+            dim = arg_strs[1]
+            return (f"torch.reshape({x}, "
+                    f"({dim},) if isinstance({dim}, int) else {dim})")
+
         elif func_name in multi_arg_funcs:
             return f"{multi_arg_funcs[func_name]}({', '.join(arg_strs)})"
 
