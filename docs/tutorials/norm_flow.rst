@@ -15,10 +15,10 @@ This tutorial is based on the Deep Generative Models (CS236) course notes [DeepG
 What are Normalizing Flows?
 ---------------------------
 
-Normalizing Flows are a class of generative models that transform a simple base distribution (e.g., Gaussian) into a more complex target distribution which can model a real world data distribution through a series of invertible transformations [DeepGenModels]_.
+Normalizing Flows are a class of generative models that transform a simple base distribution (e.g., Gaussian) into a more complex target distribution that can model a real-world data distribution through a series of invertible transformations [DeepGenModels]_.
 The key idea is to model the probability density function of the target distribution by applying a sequence of **bijective mappings** to the base distribution.
 
-A bijective mapping is a function :math:`f: \mathbb{R}^N \to \mathbb{R}^N` that is both *injective* (distinct inputs always produce distinct outputs, i.e. :math:`f(a) = f(b) \implies a = b`) and *surjective* (every point in the output space is the image of some input) [Wikipedia_Bijection]_.
+A bijective mapping is a function :math:`f: \mathbb{R}^N \to \mathbb{R}^N` that is both *injective* (distinct inputs always produce distinct outputs, i.e., :math:`f(a) = f(b) \implies a = b`) and *surjective* (every point in the output space is the image of some input) [Wikipedia_Bijection]_.
 Equivalently, a bijective function establishes a one-to-one correspondence between the input and output spaces, so it is guaranteed to have a well-defined inverse :math:`f^{-1}` satisfying :math:`f^{-1}(f(z)) = z`.
 This invertibility allows us to map freely between the simple base distribution and the complex target, and more importantly it allows us to compute exact probability densities via the change-of-variables formula [DeepGenModels]_.
 
@@ -61,16 +61,16 @@ Change of Variables
 ^^^^^^^^^^^^^^^^^^^
 
 Because :math:`f` is invertible, we can express the **probability density of** :math:`x` using the **change-of-variables formula**.
-The density :math:`p(x)` tells us how likely a point :math:`x \in \mathbb{R}^N` is under the transformed distribution with the input being a vector of shape :math:`(N,)` and the output is a non-negative real number.
+The density :math:`p(x)` tells us how likely a point :math:`x \in \mathbb{R}^N` is under the transformed distribution, with the input being a vector of shape :math:`(N,)` and the output being a non-negative real number.
 
 .. math::
     p(x) = p_z\!\left(f^{-1}(x)\right) \left| \det \mathcal{J}\!\left(f^{-1}\right) \right|
 
-The term :math:`p_z(f^{-1}(x))` first maps :math:`x` back to the latent space to get :math:`z = f^{-1}(x)`, then look up the density of that :math:`z` in the known distribution :math:`p_z` (e.g. a standard Gaussian).
+The term :math:`p_z(f^{-1}(x))` first maps :math:`x` back to the latent space to get :math:`z = f^{-1}(x)`, then looks up the density of that :math:`z` in the known distribution :math:`p_z` (e.g., a standard Gaussian).
 Since :math:`f` is bijective, every :math:`x` maps to exactly one such :math:`z`, so the density is always well-defined.
 
 The factor :math:`\left| \det \mathcal{J}(f^{-1}) \right|` is the **absolute value of the determinant of the Jacobian matrix** of :math:`f^{-1}`.
-The Jacobian describes how a function changes the region around its input, in our case how :math:`f` changes the input space :math:`x`. 
+The Jacobian describes how a function changes the region around its input; in our case, how :math:`f` changes the input space :math:`x`. 
 In normalizing flows, we need this because transforming one distribution into another changes the shape of the space the probability lives in, and the Jacobian lets us account for that.
 Also, since :math:`f` is invertible, the determinant of the Jacobian is guaranteed to be non-zero, and therefore it is always well-defined.
 The **Jacobian matrix** :math:`\mathcal{J}(f^{-1}) \in \mathbb{R}^{N \times N}` contains all first-order partial derivatives of the mapping:
@@ -79,7 +79,7 @@ The **Jacobian matrix** :math:`\mathcal{J}(f^{-1}) \in \mathbb{R}^{N \times N}` 
     \mathcal{J}(f^{-1})_{ij} = \frac{\partial [f^{-1}]_i}{\partial x_j}
 
 Its **determinant** is a single scalar that measures how the transformation locally scales volumes.
-If :math:`|\det \mathcal{J}| > 1` the mapping stretches a region of space, spreading probability over a larger volume (decreasing density); if :math:`|\det \mathcal{J}| < 1` it compresses a region (increasing density).
+If :math:`|\det \mathcal{J}| > 1`, the mapping stretches a region of space, spreading probability over a larger volume (decreasing density); if :math:`|\det \mathcal{J}| < 1`, it compresses a region (increasing density).
 Taking the absolute value ensures the density remains non-negative whether or not the transformation reverses orientation.
 
 Composing Transformations
@@ -140,7 +140,7 @@ Instead of multiplying many probabilities together, we take the logarithm turnin
 We train a normalizing flow by **maximum likelihood estimation**: we adjust the parameters of the transformations :math:`f_1, \ldots, f_K` so that the model assigns high probability to observed data.
 
 The **log-likelihood** is the logarithm of the probability the model assigns to a data point :math:`x`.
-Working with log-probabilities instead of raw probabilities as it converts products into sums (stabler and cheaper to compute versus products).
+Working with log-probabilities instead of raw probabilities, as it converts products into sums (more stable and cheaper to compute than products).
 
 Applying the logarithm to the change-of-variables formula gives the loss (negative log-likelihood):
 
@@ -148,7 +148,7 @@ Applying the logarithm to the change-of-variables formula gives the loss (negati
     \mathcal{L} = -\log p_z\!\left[f_K^{-1}(\cdots(f_1^{-1}(x)))\right] - \sum_{i=1}^{K} \log \left| \det \mathcal{J}(f_i^{-1}) \right|
 
 In Physika, the loss mirrors the two terms of the equation directly: it maps :math:`x` back to :math:`z` by undoing the transformations in reverse order, then adds the base log-density :math:`\log p_z(z)` and each layer's log-determinant of the Jacobian. 
-The ``loss`` method below is derived from the chain of transformations ``f1``, ``f2`` which we applied on our sample ``z`` above.
+The ``loss`` method below is derived from the chain of transformations ``f1``, ``f2`` that we applied to our sample ``z`` above.
 
 .. code-block:: text
 
@@ -175,14 +175,14 @@ The first term, :math:`-\log p_z[\cdot]`, penalizes mappings that send data poin
 The second, :math:`-\sum_i \log |\det \mathcal{J}(f_i^{-1})|`, penalizes transformations that excessively compress volume.
 The negative sign gives us a loss function to minimize during training.
 
-For deep-network-based flows, it is also important that the Jacobian determinant of each :math:`f_i` is efficient to compute ideally :math:`O(N)` rather than the :math:`O(N^3)` cost of a general determinant which motivates architectural choices such as coupling layers and autoregressive transforms.
+For deep-network-based flows, it is also important that the Jacobian determinant of each :math:`f_i` is efficient to compute, ideally :math:`O(N)` rather than the :math:`O(N^3)` cost of a general determinant, which motivates architectural choices such as coupling layers and autoregressive transforms.
 
 In Physika, this is fully differentiable.
-Gradients flow through the chain of transformations :math:`f_1, \ldots, f_K` and the log-density computation automatically, so the ``grad()`` function backpropagate gradients from the loss to every learnable parameter.
+Gradients flow through the chain of transformations :math:`f_1, \ldots, f_K` and the log-density computation automatically, so the ``grad()`` function backpropagates gradients from the loss to every learnable parameter.
 Sampling operations such as ``z: ℝ[N] ~ 𝒩(μ, Σ)`` are also differentiable.
 Physika follows the `Stochastic Computation Graphs (SCG) framework <https://physika.readthedocs.io/en/latest/elf.html#id2>`__, using the reparameterization trick for continuous distributions (Normal, Uniform, Beta, Gamma) by default.
-Sampling usually is a non-differentiable operation since the random draw has no gradient with respect to the distribution's parameters.
-The reparameterization trick ensures differentiability by expressing the sample as a deterministic function of the parameters independent noise added: :math:`z = \mu + \sigma \cdot \varepsilon` where :math:`\varepsilon \sim \mathcal{N}(0, I)` is fixed random noise.
+Sampling is usually a non-differentiable operation since the random draw has no gradient with respect to the distribution's parameters.
+The reparameterization trick ensures differentiability by expressing the sample as a deterministic function of the parameters and independent noise added: :math:`z = \mu + \sigma \cdot \varepsilon` where :math:`\varepsilon \sim \mathcal{N}(0, I)` is fixed random noise.
 Since :math:`z` is now a differentiable function of :math:`\mu` and :math:`\sigma`, gradients can flow through :math:`z` to these parameters as with any other computation, without special handling by the user.
 
 A more detailed treatment of the change of variables formula and of flow-based models in general can be found in [DeepGenModels]_ and [Weng2018]_.
@@ -207,13 +207,13 @@ This is not an exhaustive list, but below are some popular methods.
         .. math::
             \left|\det\left(\frac{\partial f(z)}{\partial z}\right)\right| = \left|1 + h'(w^\top z + b)\,u^\top w\right|
 
-    The planar flow while simple, runs into the following issues:
+    The planar flow, while simple, runs into the following issues:
 
         - The learned parameters :math:`u,w,b` and :math:`h`, need to be restricted to be invertible.
         - Computing :math:`f^{-1}(z)` could be difficult analytically.
-          If :math:`h` is a nonlinear activation (e.g. :math:`\tanh`), inverting :math:`f(z) = z + u\,h(w^\top z + b)` for :math:`z` requires solving an implicit nonlinear equation there is generally no closed-form expression, and iterative numerical methods (e.g. fixed-point iteration) must be used instead.
+          If :math:`h` is a nonlinear activation (e.g. :math:`\tanh`), inverting :math:`f(z) = z + u\,h(w^\top z + b)` for :math:`z` requires solving an implicit nonlinear equation; there is generally no closed-form expression, and iterative numerical methods (e.g. fixed-point iteration) must be used instead.
 
-    The below two methods address this by ensuring that the forward and inverse is easy to compute.
+    The two methods below address this by ensuring that the forward and inverse is easy to compute.
 
 2. NICE (Nonlinear Independent Components Estimation) model
     The NICE [DinhNICE2014]_ coupling layer partitions :math:`z` into 2 disjoint subsets :math:`z_1, z_2`.
@@ -371,9 +371,9 @@ This is not an exhaustive list, but below are some popular methods.
 Dataset
 -------
 
-MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
-``create_dataset`` returns the first ``total_dataset_size`` MNIST digits as a list containing a train an test split, where ``train_test_split`` is the percentage of images to keep in the train split. 
-In our case ``train_test_split = 80, total_dataset_size = 200`` so 160 images in the train split, and 40 in the test split.
+MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image; when these images are flattened or expressed as a 1D vector, we get a vector of size :math:`784`.
+``create_dataset`` returns the first ``total_dataset_size`` MNIST digits as a list containing a train and test split, where ``train_test_split`` is the percentage of images to keep in the train split. 
+In our case, ``train_test_split = 80, total_dataset_size = 200``, so 160 images in the train split and 40 in the test split.
 
 .. note::
    ``create_dataset`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
@@ -429,10 +429,10 @@ In our case ``train_test_split = 80, total_dataset_size = 200`` so 160 images in
 Training a RealNVP Normalizing Flow in Physika
 ----------------------------------------------
 
-To train the model we need a RealNVP class (shown as a snippet below), which we use to instantiate a RealNVP model allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W1_s``) with ``this.`` representing the instance of the class. 
+To train the model, we need a RealNVP class (shown as a snippet below), which we use to instantiate a RealNVP model, allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W1_s``) with ``this.`` representing the instance of the class. 
 The coupling layer is implemented using two simple feedforward neural networks with one hidden layer and ReLU activation function: one for the scale :math:`s` and one for the shift :math:`m`.
 Unlike NICE, no separate rescale layer is needed because scaling is built into the affine coupling layers.
-When calling the class (``this(x)``), runs the ``λ`` method, so ``this(x)`` is equivalent to ``λ(x)``. The above sections are implemented as individual methods, to illustrate the derivations in a simple manner.
+When calling the class (``this(x)``), it runs the ``λ`` method, so ``this(x)`` is equivalent to ``λ(x)``. The above sections are implemented as individual methods to illustrate the derivations in a simple manner.
 The Full Code section contains the complete Physika code, which can be run as-is.
 
 .. code-block:: text
@@ -497,10 +497,10 @@ The Full Code section contains the complete Physika code, which can be run as-is
             this.b2_m = this.b2_m - lr * learnable_grads[7]
 
 In the ``train`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad``, and the parameters are updated with a simple gradient descent step.
-For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
-The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
+For convenient gradient computation, ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
+The ``update_params`` method uses simple gradient descent; more sophisticated optimizers can be used as well.
 
-So when training the model the entire training looks like the snippet below:
+So, when training the model, the entire training looks like the snippet below:
 
 .. code-block:: text
 
@@ -535,14 +535,14 @@ So when training the model the entire training looks like the snippet below:
 
 
 We also compute bits-per-dimension through the ``evaluate`` method, to measure how well the model can represent some given data. 
-If this goes below 8, the model has learnt a representation of the train data which is better than an image created from pure random noise.
+If this goes below 8, the model has learnt a representation of the training data which is better than an image created from pure random noise.
 The ``test`` method lets us compute the loss on the test set, which is useful to check if the model is able to generalize to unseen data.
 The ``sample`` method lets us generate new samples from the model. In this image is a flat vector of size 784, which can be reshaped to a square image.
 
 
 Plotting Graphs
 ---------------
-Once training is done it is useful to visualize metrics such as the loss and the bits per dimension for each epoch, as it tells us if the model is training properly. 
+Once training is done, it is useful to visualize metrics such as the loss and the bits per dimension for each epoch, as it tells us if the model is training properly. 
 
 .. note::
    ``plot_losses_bits_per_dim`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
@@ -577,11 +577,11 @@ Once training is done it is useful to visualize metrics such as the loss and the
 Full Code
 ---------------------------------------------------------------------------------
 
-Here we load 160 train images of MNIST, 40 images for test, train the RealNVP model for 20 epochs, and plot the bits per dimension and train loss.
-We keep the learning rate as ``0.00015``, and hidden size as ``128`` as the hyperparameters. 
-The first line ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
+Here we load 160 training images of MNIST, 40 images for testing, train the RealNVP model for 20 epochs, and plot the bits per dimension and training loss.
+We keep the learning rate at ``0.00015`` and the hidden size at ``128`` as the hyperparameters. 
+The first line, ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
 More details on this can be found in the `Sampling documentation <https://physika.readthedocs.io/en/latest/elf.html#random-sampling>`__.
-Additionally, since Normalizing flows only work with continuous distributions, we dequantize the MNIST images to make them continuous by adding some noise sampled from uniform distribution.
+Additionally, since Normalizing flows only work with continuous distributions, we dequantize the MNIST images to make them continuous by adding some noise sampled from a uniform distribution.
 
 .. code-block:: text
 
