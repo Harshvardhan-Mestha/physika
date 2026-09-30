@@ -1,11 +1,3 @@
-(CIC: 4 construct(s) not fully verified yet; switching to HM type checking and standard codegen for those)
-    - In function 'zero_1d_array': kernel check failed against declared return type ℝ[?]: inferred type does not match declared type
-    - In function 'zero_2d_array': kernel check failed against declared return type ℝ[?, ?]: inferred type does not match declared type
-    - In function 'arange': variable 'arr' declared ℝ[n] but assigned value of type Fin ?[n]
-    - In function 'gaussian_solve': kernel check failed against declared return type ℝ[n]: Unresolved MVar 'x.11'term must be fully elaborated before kernel checking
-✓ No type errors found
-
-=== Physika generated Pytorch code ===
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -104,6 +96,3 @@ def gaussian_solve(A, b):
 A = torch.tensor([[1, 2, 1], [3, 1, (-1)], [2, (-1), 1]], device=DEVICE)
 b = torch.tensor([8, 2, 3], device=DEVICE)
 print(gaussian_solve(A, b))
-=== End Pytorch code ===
-
-[1.0, 2.0, 3.0] ∈ ℝ[3]
