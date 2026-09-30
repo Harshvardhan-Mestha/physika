@@ -4,10 +4,10 @@ Deep Equilibrium Models
 This tutorial introduces Deep Equilibrium Models (DEQs) and shows how to implement one in Physika.
 The representational power of a network is its mathematical ability to capture, express, and approximate the complex patterns and functions hidden inside data. Broadly, deeper networks have more representational capacity, which is what lets a deep model represent something like an image.
 Suppose we want the representational power of a very deep network, but without having to store and backpropagate through each and every one of its layers.
-A Deep Equilibrium Model, applies one layer over and over until its output stops changing, and treats that settled (or steady state) value as the network's answer, as opposed to stacking many distinct layers.
+A Deep Equilibrium Model applies one layer over and over until its output stops changing, and treats that settled (or steady state) value as the network's answer, as opposed to stacking many distinct layers.
 That steady state value is called an *equilibrium*, also known as a *fixed point*, and to find it we apply the layers of a neural network repeatedly to act as iterations of a root-finding problem.
 
-By the end of this tutorial you will understand what a fixed point is, why a weight-tied "infinite depth" network can be used to find such points, how to solve for that fixed point with a quasi-Newton root finder, and how Physika differentiates the loss back to the parameters through that fixed point for training.
+By the end of this tutorial, you will understand what a fixed point is, why a weight-tied "infinite depth" network can be used to find such points, how to solve for that fixed point with a quasi-Newton root finder, and how Physika differentiates the loss back to the parameters through that fixed point for training.
 You will then train a small DEQ that reconstructs handwritten digits from the MNIST dataset.
 This tutorial is based on Bai, Kolter, and Koltun's *Deep Equilibrium Models* paper [BaiDEQ2019]_ and their Deep Implicit Layers tutorial [ImplicitLayers]_.
 
@@ -20,18 +20,18 @@ A conventional deep network computes a sequence of hidden states, one per layer:
 .. math::
     h_1 = f_1(h_0, x), \quad h_2 = f_2(h_1, x), \quad \ldots, \quad h_T = f_T(h_{T-1}, x)
 
-Each layer :math:`f_t` usually has its own parameters, and the memory needed for training grows with the number of layers :math:`T`, because every intermediate :math:`h_t` must be kept for the backward pass, during gradient backpropagation.
+Each layer :math:`f_t` usually has its own parameters, and the memory needed for training grows with the number of layers :math:`T`, because every intermediate :math:`h_t` must be stroed for the backward pass during gradient backpropagation.
 
 A Deep Equilibrium Model is built from two ideas that work together.
 The first idea is to tie the weights, so every layer is the same function :math:`f(\cdot, x, \theta)`.
-The next idea is to see what happens as the depth goes to infinity, that is apply same layer infinite times.
+The next idea is to see what happens as the depth goes to infinity; that is, apply the same layer an infinite number of times.
 If repeatedly applying :math:`f` drives the hidden state toward a value that no longer changes, then that limiting value :math:`h^\star` satisfies
 
 .. math::
     h^\star = f(h^\star, x, \theta).
 
 A fixed point is any input that a particular function returns unchanged (:math:`f(x)=x`, so :math:`x` is said to be a fixed point of :math:`f`).  
-Rather than run :math:`f` a fixed number of times, a DEQ directly solves for this fixed point, once the DEQ is able to do so we can say that the model has reached the equilibrium.
+Rather than run :math:`f` a fixed number of times, a DEQ directly solves for this fixed point; once the DEQ is able to do so, we can say that the model has reached equilibrium.
 The infinite stack of identical layers is replaced by a single object, the equilibrium, and the entire forward pass becomes "find the :math:`h^\star` that :math:`f` leaves unchanged" [BaiDEQ2019]_.
 
 .. figure:: /_static/tutorial_files/deq/deq.jpg
@@ -58,7 +58,7 @@ The concrete choice used in this tutorial is a single fully connected layer with
 Here :math:`W \in \mathbb{R}^{n \times n}` mixes the hidden state with itself, :math:`U \in \mathbb{R}^{d \times n}` injects the input, and :math:`b \in \mathbb{R}^{1 \times n}` is a bias.
 Note that :math:`x` enters :math:`f` but never changes while we iterate: 
 
-In Physika the layer is written exactly as the equation reads:
+In Physika, the layer is written exactly as the equation reads:
 
 .. code-block:: text
 
@@ -107,7 +107,7 @@ For a DEQ, the function is :math:`f(\cdot, x, \theta)` with :math:`x` and :math:
 For the equilibrium to be well defined, such a point must exist and be unique, because the existence gives the function a target to converge to after many iterations, and uniqueness makes that target independent of where the function starts.
 The **Banach fixed-point theorem** answers both under one condition [Wikipedia_Banach]_.
 
-**Contraction**: :math:`f` is said to be a contraction if it always brings pairs of points closer together by at least a constant factor there exists a Lipschitz constant :math:`L < 1` such that
+**Contraction**: :math:`f` is said to be a contraction if it always brings pairs of points closer together by at least a constant factor; there exists a Lipschitz constant :math:`L < 1` such that
 
 .. math::
     \left\| f(a, x, \theta) - f(b, x, \theta) \right\| \le L \, \left\| a - b \right\| \qquad \text{for all } a, b,
@@ -118,7 +118,7 @@ So when we apply a contraction, it shrinks distances between points.
 The Banach fixed-point theorem states that a contraction on a complete space [Wikipedia_CompleteSpace]_ has exactly one fixed point :math:`h^\star`, and that the simple iteration :math:`h_{k+1} = f(h_k, x, \theta)` converges to it from any starting point.
 This repeated-application scheme is called Picard iteration, and its error shrinks geometrically as :math:`L^k`.
 
-The theorem is what DEQ principally works on, as long as :math:`f` (the layer) is a contraction, the equilibrium exists and is unique.
+The theorem is what DEQ principally works on: as long as :math:`f` (the layer) is a contraction, the equilibrium exists and is unique.
 Our layer makes this easy to arrange. The derivative of :math:`\tanh` is :math:`\tanh'(z) = 1 - \tanh^2(z)`, which is largest at :math:`z = 0` where it equals :math:`1` and is smaller everywhere else, so :math:`\tanh` is *1-Lipschitz*: it never stretches a distance. We can see this by computing the slope directly, with the corresponding Physika snippet below:
 
 .. code-block:: text
@@ -133,7 +133,7 @@ Solving a Linear System in Physika
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In the DEQ forward pass in the next section, each Newton step solves the linear system :math:`J \delta = g` for the update :math:`\delta`. 
-We import the ``gaussian_solve`` function (along with it's helper functions) which solves a linear system of equations using **Gaussian elimination** [Wikipedia_GaussianElimination]_, implemented in the `Gaussian Elimination Tutorial <https://physika.readthedocs.io/en/latest/tutorials/linear_solve_gaussian_elimination.html>`__.
+We import the ``gaussian_solve`` function (along with its helper functions), which solves a linear system of equations using **Gaussian elimination** [Wikipedia_GaussianElimination]_, implemented in the `Gaussian Elimination Tutorial <https://physika.readthedocs.io/en/latest/tutorials/linear_solve_gaussian_elimination.html>`__.
 For more details on importing Physika functions, please refer to the documentation on `import statements <https://physika.readthedocs.io/en/latest/language.html#import-statements>`__.
 
 .. code-block:: text
@@ -149,14 +149,14 @@ Solving for the Equilibrium (the Forward Pass)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Finding :math:`h^\star` is a root-finding problem, meaning we look for the point where a function equals zero. 
-That function is the residual, this function measures far a given point is from being a fixed point:
+That function is the residual; this function measures how far a given point is from being a fixed point:
 
 .. math::
     g(h) = f(h, x, \theta) - h,
 
-The equilibrium is exactly the value that makes the residual vanish, :math:`g(h^\star) = 0`.
-A root of the residual is therefore an equilibrium of the layer (or in other words the fixed point of the function).
-In Physika the residual is implemented as shown below, where ``h_star`` denotes the equilibrium:
+The equilibrium is exactly the value that makes the residual vanish: :math:`g(h^\star) = 0`.
+A root of the residual is therefore an equilibrium of the layer (or, in other words, the fixed point of the function).
+In Physika, the residual is implemented as shown below, where ``h_star`` denotes the equilibrium:
 
 .. code-block:: text
 
@@ -175,12 +175,12 @@ In Physika the residual is implemented as shown below, where ``h_star`` denotes 
     g(h_k - \delta) \approx g(h_k) - J\,\delta,
 
 where :math:`J = \partial g / \partial h` is the **residual Jacobian**, the matrix of partial derivatives of :math:`g` with respect to :math:`h`.
-Newton's method picks the step :math:`\delta` that makes this linear approximation zero, that is it solves
+Newton's method picks the step :math:`\delta` that makes this linear approximation zero; that is it solves
 
 .. math::
     J\,\delta = g(h_k), \qquad h_{k+1} = h_k - \delta.
 
-The main observation is that the first equation is a linear system :math:`J\delta = g`, so each Newton step solves a linear system rather than forming a matrix inverse.
+The main observation to make is that the first equation is a linear system :math:`J\delta = g`, so each Newton step solves a linear system rather than forming a matrix inverse.
 Solving :math:`J\delta = g` is both computationally cheaper and more numerically stable than building :math:`J^{-1}` and multiplying, and the ``gaussian_solve`` method allows us to solve such systems.
 
 We still need :math:`J = \partial g/\partial h`. Since :math:`g = f - h`, differentiating the :math:`-h` term gives a :math:`-I`, so :math:`J = \partial f/\partial h - I`.
@@ -210,7 +210,7 @@ In later sections we shall discuss the various methods of solving the fixed poin
 Differentiating Through the Equilibrium (the Backward Pass)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To train the model we need the gradient of the loss with respect to the parameters, which requires the gradient of the equilibrium :math:`h^\star` with respect to :math:`\theta`.
+During training, we need the gradient of the loss with respect to the parameters, which requires the gradient of the equilibrium :math:`h^\star` with respect to :math:`\theta`.
 Differentiating the equilibrium condition itself gives us an exact solution, called implicit differentiation [BaiDEQ2019]_.
 Starting from :math:`h^\star = f(h^\star, x, \theta)` and differentiating both sides with respect to :math:`\theta` (the right-hand side needs the chain rule because :math:`h^\star` depends on :math:`\theta`):
 
@@ -246,7 +246,7 @@ Using :math:`\tanh' = 1 - \tanh^2` and :math:`h^\star = \tanh(\cdot)`, the layer
     = -\bigl(w(1 - {h^\star}^2) - 1\bigr)^{-1}\,(1 - {h^\star}^2).
 
 With :math:`w = 0.5` and :math:`h^\star = 0.4`, the layer derivative is :math:`0.42`, so the factor :math:`-(0.42 - 1)^{-1} = 1.724` multiplies the one-layer gradient :math:`0.84`, giving :math:`\partial h^\star/\partial b \approx 1.448`.
-The :math:`-(\partial f/\partial h^\star - I)^{-1}` term is how Deep Equilibrium Models work, in the scalar case it is the geometric series :math:`1 + f' + f'^2 + \cdots = (1 - f')^{-1}`, the summed influence of the layer repeatedly.
+The :math:`-(\partial f/\partial h^\star - I)^{-1}` term is how Deep Equilibrium Models work; in the scalar case, it is the geometric series :math:`1 + f' + f'^2 + \cdots = (1 - f')^{-1}`, the summed influence of the layer repeated.
 
 Differentiability in Physika
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -267,7 +267,7 @@ This is not an exhaustive list, but below are the solvers most commonly used, fr
 
 2. Newton's Method
     Newton's method [Wikipedia_Newton]_ uses the residual Jacobian :math:`J = \partial f/\partial h - I` to take much larger steps, solving :math:`J \delta = g(h_k)` and setting :math:`h_{k+1} = h_k - \delta`.
-    Near the solution it converges quadratically, so it needs very few iterations, at the cost of forming and solving with the :math:`n \times n` Jacobian every step.
+    Near the solution, it converges quadratically, so it needs very few iterations, at the cost of forming and solving with the :math:`n \times n` Jacobian every step.
 
 3. Quasi-Newton Methods
     Quasi-Newton methods keep Newton's fast convergence while avoiding a fresh exact Jacobian every step.
@@ -282,7 +282,7 @@ Implementing the Equilibrium Solver
 
 This section covers the implementation of an equilibrium solver with a quasi-Newton update.
 The ``equilibrium`` method computes :math:`f_h = f(h_0, x)` and :math:`1 - f_h^2` (``tanh``), freezes the residual Jacobian :math:`J = \partial f/\partial h - I` once with ``df_dh(...) - eye(...)``, then runs the chord iteration.
-The Physika snippets in this section contain the implementation of the equilibrium solver, and the loss function.
+The Physika snippets in this section contain the implementation of the equilibrium solver and the loss function.
 
 .. code-block:: text
 
@@ -294,12 +294,12 @@ The Physika snippets in this section contain the implementation of the equilibri
         J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
         for k:ℕ(num_solver_steps):
             g = f(h_star, x) - h_star
-            delta = linsolve(J, g[0])
+            delta = gaussian_solve(J, g[0])
             h_star = h_star - [delta]
         return h_star
 
 Three steps are sufficient as the contraction leaves :math:`h_0 = 0` already close to :math:`h^\star`, so the frozen-Jacobian iteration reaches the equilibrium in a handful of steps.
-The ``sum_2d`` function is a helper that sums all elements of a 2D array, and is used to compute the loss.
+The ``sum_2d`` function is a helper that sums all elements of a 2D array and is used to compute the loss.
 The call operator ``λ`` runs the solver and decodes the equilibrium into data space, :math:`\hat{x} = h^\star W_o + b_o`, and the loss is the squared reconstruction error :math:`\|\,x - \hat{x}\,\|^2` against the input image itself:
 
 .. code-block:: text
@@ -323,7 +323,7 @@ The call operator ``λ`` runs the solver and decodes the equilibrium into data s
 Dataset
 ----------- 
 
-MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image, when these images are flattened or expressed as a 1D vector we get a vector of size :math:`784`.
+MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale image; when these images are flattened or expressed as a 1D vector, we get a vector of size :math:`784`.
 ``load_mnist`` returns the first ``n`` MNIST digits as a ``ℝ[n, 784]`` array of flattened images. It is not a built-in; add this helper to ``physika/runtime.py``:
 
 .. code-block:: python
@@ -337,7 +337,7 @@ MNIST is a dataset of handwritten digits, each a :math:`28 \times 28` grayscale 
 Training a DEQ in Physika
 -----------------------------
 
-To train the model we need a DEQ class (shown as a snippet below), which we use to instantiate a model allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W``) with ``this.`` representing the instance of the class.
+To train the model, we need a DEQ class (shown as a snippet below), which we use to instantiate a model allowing us to refer to its methods (eg: ``this.loss``) and parameters (eg: ``this.W``) with ``this.`` representing the instance of the class.
 When calling the class (``this(x)``), runs the ``λ`` method, so ``this(x)`` is equivalent to ``λ(x)``. The above sections are implemented as individual methods, for simplicity.
 The Full Code section contains the complete Physika code, which can be run as-is.
 
@@ -390,10 +390,10 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
 
 In the ``train`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad``, and the parameters are updated with a simple gradient descent step.
-For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
-The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
+For convenient gradient computation, ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
+The ``update_params`` method uses simple gradient descent; more sophisticated optimizers can be used as well.
 
-So when training the model the entire training looks like the snippet below, shown is a simplified example:
+So when training the model, the entire training looks like the snippet below; shown is a simplified example:
 
 .. code-block:: text
 
@@ -410,11 +410,10 @@ So when training the model the entire training looks like the snippet below, sho
     epochs: ℕ = 1
     lr: ℝ = 0.001
     losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
-````
 
 .. note::
 
-    The DEQ is differentiable end to end with no hand-written backward. Gradients flow through the decoder, through the unrolled quasi-Newton solve (including ``linsolve``), and into :math:`W, U, b, W_o, b_o` automatically. Because the frozen Jacobian cancels at the fixed point, this recovers the exact implicit gradient.
+    The DEQ is differentiable end to end with no hand-written backward. Gradients flow through the decoder, through the unrolled quasi-Newton solve (including ``gaussian_solve``), and into :math:`W, U, b, W_o, b_o` automatically. Because the frozen Jacobian cancels at the fixed point, this recovers the exact implicit gradient.
 
 
 
@@ -458,7 +457,7 @@ Full Code
 ---------
 
 Here we load 50 images of MNIST, train the DEQ for 20 epochs, and plot the training curve and the reconstruction loss before and after training.
-We keep the learning rate (``lr``) at ``0.001``, and the number of solver steps at (``solver_steps``) ``3``, and the hidden size as ``8`` as the hyperparameters. 
+We keep the learning rate (``lr``) at ``0.001``, the number of solver steps at (``solver_steps``) ``3``, and the hidden size at ``8`` as the hyperparameters. 
 The ``rand_array`` helper is used to initialize the learnable parameters with small random values.
 The first line ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
 More details on this can be found in the `Sampling documentation <https://physika.readthedocs.io/en/latest/elf.html#random-sampling>`__.
