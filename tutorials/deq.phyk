@@ -1,6 +1,6 @@
 physika.seed(0)
 from tutorials.linear_solve_gaussian_elimination import gaussian_solve 
-from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array
+from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array, max
 
 def tanh(a: ℝ[p,q]): ℝ[p,q]:
     num: ℝ[p,q] = exp(a) - exp(-a)

@@ -139,7 +139,7 @@ For more details on importing Physika functions, please refer to the documentati
 .. code-block:: text
     
     from tutorials.linear_solve_gaussian_elimination import gaussian_solve 
-    from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array
+    from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array, max
 
 
 Since Physika is fully differentiable, the ``gaussian_solve`` function is differentiable as well.
@@ -343,45 +343,42 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
 .. code-block:: text
 
-    class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
+    class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: ℕ, d: ℕ, solver_steps: ℕ):
         h_star: ℝ[1,n]
         def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
             return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
-            num_solver_steps: ℕ = 3
-            this.h_star = zeros2d(1, 8)
+            this.h_star = zeros2d(1, this.n)
             f_h: ℝ[1,n] = this.f(this.h_star, x)
             tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
-            for k:ℕ(num_solver_steps):
+            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(this.n)
+            for k:ℕ(this.solver_steps):
                 g = this.f(this.h_star, x) - this.h_star
-                delta = linsolve(J, g[0])
+                delta = gaussian_solve(J, g[0])
                 this.h_star = this.h_star - [delta]
             return this.h_star
         def λ(x: ℝ[1,d]) → ℝ[1,d]:
             h_star: ℝ[1,n] = this.equilibrium(x)
             return h_star @ Wo + bo
-        def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
-            diff: ℝ[1,784] = target - x_hat
-            return sum(diff * diff)
-        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
-            loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
+        def loss(target: ℝ[1,d], x_hat: ℝ[1,d]): ℝ:
+            err: ℝ[1,d] = target - x_hat
+            return sum_2d(err * err, 1, d)
+        def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+            losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
+                total = 0
                 for i:ℕ(images):
                     x: ℝ[1,d] = [X[i]]
                     preds = this(x)
                     L = this.loss(x, preds)
                     learnable_grads = grad(L, this.learnable_params)
                     this.update_params(lr, learnable_grads)
-                total = 0
-                for i:ℕ(images):
-                    x: ℝ[1,d] = [X[i]]
-                    pred = this(x)
-                    total += this.loss(x, pred)
+                    new_preds = this(x)
+                    total += this.loss(x, new_preds)
                 epoch_loss = total/images
-                loss[epoch] = epoch_loss
+                losses[epoch] = epoch_loss
                 print(epoch_loss)
-            return loss
+            return losses
         def update_params(lr: ℝ, learnable_grads: ℝ[m]):
             this.W = this.W - lr * learnable_grads[0]
             this.U = this.U - lr * learnable_grads[1]
@@ -391,31 +388,28 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
 
 
+
 In the ``train`` method, the loss is computed for each image, the gradient of the loss with respect to the learnable parameters is computed with ``grad``, and the parameters are updated with a simple gradient descent step.
 For convenient gradient computation ``this.learnable_params`` is a built-in that collects all the parameters of the class that are differentiable, so ``grad`` returns a list of gradients in the same order as the parameters.
 The ``update_params`` method uses simple gradient descent, more sophisticated optimizers can be used as well.
 
-So when training the model the entire training looks like the snippet below, shown is a simplified example on dummy data:
+So when training the model the entire training looks like the snippet below, shown is a simplified example:
 
 .. code-block:: text
 
-    # initialize learnable parameters to zeros
-    W: ℝ[8,8] = zeros2d(8, 8)
-    U: ℝ[784,8] = zeros2d(784, 8)
-    b: ℝ[1,8] = zeros2d(1, 8)
-    Wo: ℝ[8,784] = zeros2d(8, 784)
-    bo: ℝ[1,784] = zeros2d(1, 784)
+    d: ℝ, n: ℝ, solver_steps: ℝ  = 784, 8, 3
+    W: ℝ[n,n] = rand_array(n, n, 0.01)
+    U: ℝ[d,n] = rand_array(d, n, 0.02)
+    b: ℝ[1,n] = zeros2d(1, n)
+    Wo: ℝ[n,d] = rand_array(n, d, 0.05)
+    bo: ℝ[1,d] = zeros2d(1, d)
 
-    # train for 20 epochs with learning rate 0.001, on a single image (here all zeros)
-    images: ℝ = 1
-    X: ℝ[1, 784] = load_mnist(1) 
-    epochs: ℕ = 20
+    deq: DEQ = DEQ(W, U, b, Wo, bo, n, d, solver_steps)
+    images: ℝ = 10 
+    X: ℝ[10, 784] = load_mnist(images) 
+    epochs: ℕ = 1
     lr: ℝ = 0.001
-    # instantiate the DEQ class with all learnable parameters
-    deq: DEQ = DEQ(W, U, b, Wo, bo)
-
     losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
-
 ````
 
 .. note::
@@ -464,7 +458,7 @@ Full Code
 ---------
 
 Here we load 50 images of MNIST, train the DEQ for 20 epochs, and plot the training curve and the reconstruction loss before and after training.
-We keep the learning rate at ``0.001``, and the number of solver steps at ``3``, and the hidden size as ``8`` as the hyperparameters. 
+We keep the learning rate (``lr``) at ``0.001``, and the number of solver steps at (``solver_steps``) ``3``, and the hidden size as ``8`` as the hyperparameters. 
 The ``rand_array`` helper is used to initialize the learnable parameters with small random values.
 The first line ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
 More details on this can be found in the `Sampling documentation <https://physika.readthedocs.io/en/latest/elf.html#random-sampling>`__.
@@ -472,10 +466,20 @@ More details on this can be found in the `Sampling documentation <https://physik
 .. code-block:: text
 
     physika.seed(0)
+    from tutorials.linear_solve_gaussian_elimination import gaussian_solve 
+    from tutorials.linear_solve_gaussian_elimination import get_2d_array_num_rows, get_2d_array_num_cols, get_1d_array_length, zero_2d_array, zero_1d_array, max
+
     def tanh(a: ℝ[p,q]): ℝ[p,q]:
         num: ℝ[p,q] = exp(a) - exp(-a)
         denom: ℝ[p,q] = exp(a) + exp(-a)
         return num / denom
+
+    def sum_2d(a: ℝ[p, q], p: ℕ, q: ℕ): ℝ:
+        s: ℝ = 0.0
+        for i:ℕ(p):
+            for j:ℕ(q):
+                s += a[i, j]
+        return s
 
     def rand_array(n: ℝ, m: ℝ, μ: ℝ): ℝ[n, m]:
         return for i:ℕ(n) → ε: ℝ[m] ~ Normal(0.0, μ, m)
@@ -495,80 +499,42 @@ More details on this can be found in the `Sampling documentation <https://physik
     def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
         return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
 
-    def linsolve(A: ℝ[8, 8], b: ℝ[8]): ℝ[8]:
-        aug: ℝ[8, 9] = zeros2d(8, 9)
-        for i:ℕ(8):
-            for c:ℕ(8):
-                aug[i, c] = A[i, c]
-            aug[i, 8] = b[i]
-        for i:ℕ(8):
-            piv = zeros1d(9)
-            for c:ℕ(9):
-                piv[c] = aug[i, c]
-            aug_next = zeros2d(8, 9)
-            for r:ℕ(8):
-                if r == i:
-                    for c:ℕ(9):
-                        aug_next[r, c] = piv[c] / piv[i]
-                else:
-                    fac = aug[r, i] / piv[i]
-                    for c:ℕ(9):
-                        aug_next[r, c] = aug[r, c] - fac * piv[c]
-            aug = aug_next
-        x: ℝ[8] = zeros1d(8)
-        for i:ℕ(8):
-            idx = 7 - i
-            total = aug[idx, 8]
-            for j:ℕ(idx + 1, 8):
-                total = total - aug[idx, j] * x[j]
-            x_next = zeros1d(8)
-            for c:ℕ(8):
-                if c == idx:
-                    x_next[c] = total / aug[idx, idx]
-                else:
-                    x_next[c] = x[c]
-            x = x_next
-        return x
-
-    class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d]):
+    class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: ℕ, d: ℕ, solver_steps: ℕ):
         h_star: ℝ[1,n]
         def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
             return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
-            num_solver_steps: ℕ = 3
-            this.h_star = zeros2d(1, 8)
+            this.h_star = zeros2d(1, this.n)
             f_h: ℝ[1,n] = this.f(this.h_star, x)
             tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
-            for k:ℕ(num_solver_steps):
+            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(this.n)
+            for k:ℕ(this.solver_steps):
                 g = this.f(this.h_star, x) - this.h_star
-                delta = linsolve(J, g[0])
+                delta = gaussian_solve(J, g[0])
                 this.h_star = this.h_star - [delta]
             return this.h_star
         def λ(x: ℝ[1,d]) → ℝ[1,d]:
             h_star: ℝ[1,n] = this.equilibrium(x)
             return h_star @ Wo + bo
-        def loss(target: ℝ[1,784], x_hat: ℝ[1,784]): ℝ:
-            diff: ℝ[1,784] = target - x_hat
-            return sum(diff * diff)
-        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
-            loss: ℝ[epochs] = for i:ℕ(epochs) -> i*0
+        def loss(target: ℝ[1,d], x_hat: ℝ[1,d]): ℝ:
+            err: ℝ[1,d] = target - x_hat
+            return sum_2d(err * err, 1, d)
+        def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+            losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
+                total = 0
                 for i:ℕ(images):
                     x: ℝ[1,d] = [X[i]]
                     preds = this(x)
                     L = this.loss(x, preds)
                     learnable_grads = grad(L, this.learnable_params)
                     this.update_params(lr, learnable_grads)
-                total = 0
-                for i:ℕ(images):
-                    x: ℝ[1,d] = [X[i]]
-                    pred = this(x)
-                    total += this.loss(x, pred)
+                    new_preds = this(x)
+                    total += this.loss(x, new_preds)
                 epoch_loss = total/images
-                loss[epoch] = epoch_loss
+                losses[epoch] = epoch_loss
                 print(epoch_loss)
-            return loss
+            return losses
         def update_params(lr: ℝ, learnable_grads: ℝ[m]):
             this.W = this.W - lr * learnable_grads[0]
             this.U = this.U - lr * learnable_grads[1]
@@ -577,15 +543,17 @@ More details on this can be found in the `Sampling documentation <https://physik
             this.bo = this.bo - lr * learnable_grads[4]
 
     print(DEVICE)
-    W: ℝ[8,8] = rand_array(8, 8, 0.01)
-    U: ℝ[784,8] = rand_array(784, 8, 0.02)
-    b: ℝ[1,8] = zeros2d(1, 8)
-    Wo: ℝ[8,784] = rand_array(8, 784, 0.05)
-    bo: ℝ[1,784] = zeros2d(1, 784)
-    deq: DEQ = DEQ(W, U, b, Wo, bo)
+    d: ℝ, n: ℝ, solver_steps: ℝ  = 784, 8, 3
 
+    W: ℝ[n,n] = rand_array(n, n, 0.01)
+    U: ℝ[d,n] = rand_array(d, n, 0.02)
+    b: ℝ[1,n] = zeros2d(1, n)
+    Wo: ℝ[n,d] = rand_array(n, d, 0.05)
+    bo: ℝ[1,d] = zeros2d(1, d)
+
+    deq: DEQ = DEQ(W, U, b, Wo, bo, n, d, solver_steps)
     images: ℝ = 50
-    # add load_mnist to physika/runtime.py to run on MNIST data
+    # add load_mnist python helper to physika/runtime.py to run on MNIST data
     X: ℝ[50, 784] = load_mnist(images) 
 
     x0: ℝ[1,784] = [X[0]]
@@ -596,10 +564,11 @@ More details on this can be found in the `Sampling documentation <https://physik
     epochs: ℕ = 20
     lr: ℝ = 0.001
     losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
-    recon_after: ℝ[1,784] = deq(x0)
-    loss_after: ℝ = deq.loss(x0, recon_after)
+    loss_before: ℝ = losses[0]
+    loss_after: ℝ = losses[-1]
+    print(loss_before)
     print(loss_after)
-    # add plot_deq_losses helper to physika/runtime.py to create and save plots
+    # add plot_deq_losses python helper to physika/runtime.py to create and save plots
     plot_deq_losses(losses, loss_before, loss_after)
 
 
