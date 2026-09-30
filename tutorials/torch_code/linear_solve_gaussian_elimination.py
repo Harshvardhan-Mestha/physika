@@ -57,7 +57,7 @@ def gaussian_solve(A, b):
     a_row = get_2d_array_num_rows(A)
     a_col = get_2d_array_num_cols(A)
     new_col = (a_col + 1)
-    aug = torch.zeros(int(a_row), int(new_col))
+    aug = torch.zeros(int(a_row), int(new_col), device=DEVICE)
     for i in range(int(0), int(a_row)):
         aug[int(i), :int(a_col)] = A[int(i), :]
         aug[int(i), int(a_col)] = b[int(i)]
@@ -81,7 +81,7 @@ def gaussian_solve(A, b):
         elimination_factors = (rows_below[:, int(i):int((i + 1))] / pivot_value)
         eliminated_rows = (rows_below - (elimination_factors * pivot_row))
         aug = torch.cat([aug[:int((i + 1)), :], eliminated_rows])
-    x = torch.zeros(int(0))
+    x = torch.zeros(int(0), device=DEVICE)
     for i in range(int(0), int(a_row)):
         idx = ((a_col - 1) - i)
         total = aug[int(idx), int(a_col)]

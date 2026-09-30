@@ -32,7 +32,7 @@ def rk4_step(state, t, Δt, ode_func):
 
 def odesolver(ode_func, y0, Δt, timesteps):
     n_times = len(timesteps)
-    trajectory = torch.zeros(int(n_times), int(2), int(1))
+    trajectory = torch.zeros(int(n_times), int(2), int(1), device=DEVICE)
     state = y0
     trajectory[int(0)] = state
     for i in range(int(1), int(n_times)):
@@ -50,7 +50,7 @@ def damped_oscillator(state):
 
 def generate_dataset(y0, Δt, timesteps):
     n_times = len(timesteps)
-    trajectory = torch.zeros(int(n_times), int(2), int(1))
+    trajectory = torch.zeros(int(n_times), int(2), int(1), device=DEVICE)
     state = y0
     trajectory[int(0)] = state
     for i in range(int(1), int(n_times)):
@@ -110,10 +110,10 @@ def rk4_step_adjoint(z, a, W1g, B1g, W2g, B2g, dt, model):
 def adjoint_solver(pred_traj, true_trajectory, Δt, n_steps, model):
     z = pred_traj[int((n_steps - 1))]
     a = (2 * (pred_traj[int((n_steps - 1))] - true_trajectory[int((n_steps - 1))]))
-    W1g = torch.zeros(int(n_neurons), int(2))
-    B1g = torch.zeros(int(n_neurons), int(1))
-    W2g = torch.zeros(int(2), int(n_neurons))
-    B2g = torch.zeros(int(2), int(1))
+    W1g = torch.zeros(int(n_neurons), int(2), device=DEVICE)
+    B1g = torch.zeros(int(n_neurons), int(1), device=DEVICE)
+    W2g = torch.zeros(int(2), int(n_neurons), device=DEVICE)
+    B2g = torch.zeros(int(2), int(1), device=DEVICE)
     for i in range(int(0), int((n_steps - 1))):
         aug_state = rk4_step_adjoint(z, a, W1g, B1g, W2g, B2g, (-Δt), model)
         z, a, W1g, B1g, W2g, B2g = aug_state
@@ -180,10 +180,10 @@ W2 = torch.stack([torch.distributions.Normal(μ, σ).rsample((int(n_neurons),)) 
 B2 = torch.tensor([[0.01], [0.01]], device=DEVICE)
 model = ODEFunc(W1, B1, W2, B2).to(DEVICE)
 lr = 0.01
-adam_W1 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(n_neurons), int(2)), torch.zeros(int(n_neurons), int(2))).to(DEVICE)
-adam_B1 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(n_neurons), int(1)), torch.zeros(int(n_neurons), int(1))).to(DEVICE)
-adam_W2 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(2), int(n_neurons)), torch.zeros(int(2), int(n_neurons))).to(DEVICE)
-adam_B2 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(2), int(1)), torch.zeros(int(2), int(1))).to(DEVICE)
+adam_W1 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(n_neurons), int(2), device=DEVICE), torch.zeros(int(n_neurons), int(2), device=DEVICE)).to(DEVICE)
+adam_B1 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(n_neurons), int(1), device=DEVICE), torch.zeros(int(n_neurons), int(1), device=DEVICE)).to(DEVICE)
+adam_W2 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(2), int(n_neurons), device=DEVICE), torch.zeros(int(2), int(n_neurons), device=DEVICE)).to(DEVICE)
+adam_B2 = AdamOptimizer(lr, 0.9, 0.999, 1e-08, 0.0, torch.zeros(int(2), int(1), device=DEVICE), torch.zeros(int(2), int(1), device=DEVICE)).to(DEVICE)
 epochs = 1
 for i in range(int(0), int(epochs)):
     print(i)

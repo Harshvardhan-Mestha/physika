@@ -16,19 +16,19 @@ def get_2d_array_num_rows(x):
 
 def lu_decomposition(A, b):
     n_size = get_2d_array_num_rows(A)
-    P = torch.zeros(int(n_size), int(n_size))
+    P = torch.zeros(int(n_size), int(n_size), device=DEVICE)
     for i in range(int(0), int(n_size)):
         P[int(i), int(i)] = 1.0
-    L = torch.zeros(int(n_size), int(n_size))
-    U = torch.zeros(int(n_size), int(n_size))
+    L = torch.zeros(int(n_size), int(n_size), device=DEVICE)
+    U = torch.zeros(int(n_size), int(n_size), device=DEVICE)
     for j in range(int(0), int(n_size)):
         max_row = j
         for i in range(int((j + 1)), int(n_size)):
             if torch.abs(A[int(i), int(j)] if isinstance(A[int(i), int(j)], torch.Tensor) else torch.tensor(float(A[int(i), int(j)]))) > torch.abs(A[int(max_row), int(j)] if isinstance(A[int(max_row), int(j)], torch.Tensor) else torch.tensor(float(A[int(max_row), int(j)]))):
                 max_row = i
-        A_next = torch.zeros(int(n_size), int(n_size))
-        L_next = torch.zeros(int(n_size), int(n_size))
-        P_next = torch.zeros(int(n_size), int(n_size))
+        A_next = torch.zeros(int(n_size), int(n_size), device=DEVICE)
+        L_next = torch.zeros(int(n_size), int(n_size), device=DEVICE)
+        P_next = torch.zeros(int(n_size), int(n_size), device=DEVICE)
         for r in range(int(0), int(n_size)):
             source = r
             if r == j:
@@ -43,34 +43,34 @@ def lu_decomposition(A, b):
         A = A_next
         L = L_next
         P = P_next
-        u_col = torch.zeros(int(n_size))
+        u_col = torch.zeros(int(n_size), device=DEVICE)
         for i in range(int(0), int((j + 1))):
             partial = 0.0
             for k in range(int(0), int(i)):
                 partial = (partial + (u_col[int(k)] * L[int(i), int(k)]))
             new_val = (A[int(i), int(j)] - partial)
-            u_col_next = torch.zeros(int(n_size))
+            u_col_next = torch.zeros(int(n_size), device=DEVICE)
             for c in range(int(0), int(n_size)):
                 if c == i:
                     u_col_next[int(c)] = new_val
                 else:
                     u_col_next[int(c)] = u_col[int(c)]
             u_col = u_col_next
-        l_col = torch.zeros(int(n_size))
+        l_col = torch.zeros(int(n_size), device=DEVICE)
         for i in range(int(j), int(n_size)):
             partial = 0.0
             for k in range(int(0), int(j)):
                 partial = (partial + (u_col[int(k)] * L[int(i), int(k)]))
             new_val = ((A[int(i), int(j)] - partial) / u_col[int(j)])
-            l_col_next = torch.zeros(int(n_size))
+            l_col_next = torch.zeros(int(n_size), device=DEVICE)
             for c in range(int(0), int(n_size)):
                 if c == i:
                     l_col_next[int(c)] = new_val
                 else:
                     l_col_next[int(c)] = l_col[int(c)]
             l_col = l_col_next
-        U_next = torch.zeros(int(n_size), int(n_size))
-        L_next2 = torch.zeros(int(n_size), int(n_size))
+        U_next = torch.zeros(int(n_size), int(n_size), device=DEVICE)
+        L_next2 = torch.zeros(int(n_size), int(n_size), device=DEVICE)
         for r in range(int(0), int(n_size)):
             for c in range(int(0), int(n_size)):
                 if c == j:
@@ -81,33 +81,33 @@ def lu_decomposition(A, b):
                     L_next2[int(r), int(c)] = L[int(r), int(c)]
         U = U_next
         L = L_next2
-    Pb = torch.zeros(int(n_size))
+    Pb = torch.zeros(int(n_size), device=DEVICE)
     for i in range(int(0), int(n_size)):
         sum_val = 0.0
         for j in range(int(0), int(n_size)):
             sum_val = (sum_val + (P[int(i), int(j)] * b[int(j)]))
         Pb[int(i)] = sum_val
-    y = torch.zeros(int(n_size))
+    y = torch.zeros(int(n_size), device=DEVICE)
     for i in range(int(0), int(n_size)):
         total = Pb[int(i)]
         for j in range(int(0), int(i)):
             total = (total - (L[int(i), int(j)] * y[int(j)]))
         solved_val = (total / L[int(i), int(i)])
-        y_next = torch.zeros(int(n_size))
+        y_next = torch.zeros(int(n_size), device=DEVICE)
         for c in range(int(0), int(n_size)):
             if c == i:
                 y_next[int(c)] = solved_val
             else:
                 y_next[int(c)] = y[int(c)]
         y = y_next
-    results = torch.zeros(int(n_size))
+    results = torch.zeros(int(n_size), device=DEVICE)
     for i in range(int(0), int(n_size)):
         idx = ((n_size - 1) - i)
         total = y[int(idx)]
         for j in range(int((idx + 1)), int(n_size)):
             total = (total - (U[int(idx), int(j)] * results[int(j)]))
         solved_val = (total / U[int(idx), int(idx)])
-        results_next = torch.zeros(int(n_size))
+        results_next = torch.zeros(int(n_size), device=DEVICE)
         for c in range(int(0), int(n_size)):
             if c == idx:
                 results_next[int(c)] = solved_val
