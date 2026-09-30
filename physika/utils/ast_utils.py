@@ -758,7 +758,9 @@ def ast_to_torch_expr(node: ASTNode,
 
         elif func_name == "zeros":
             # Shape args must be ints
-            return f"torch.zeros({', '.join(f'int({a})' for a in arg_strs)})"
+            return (f"torch.zeros("
+                    f"{', '.join(f'int({a})' for a in arg_strs)}, "
+                    f"device=DEVICE)")
 
         elif func_name == "reshape":
             # tensor node
