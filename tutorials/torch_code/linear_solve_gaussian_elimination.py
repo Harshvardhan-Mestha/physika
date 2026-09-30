@@ -1,3 +1,11 @@
+(CIC: 4 construct(s) not fully verified yet; switching to HM type checking and standard codegen for those)
+    - In function 'zero_1d_array': kernel check failed against declared return type ℝ[?]: inferred type does not match declared type
+    - In function 'zero_2d_array': kernel check failed against declared return type ℝ[?, ?]: inferred type does not match declared type
+    - In function 'arange': variable 'arr' declared ℝ[n] but assigned value of type Fin ?[n]
+    - In function 'gaussian_solve': kernel check failed against declared return type ℝ[n]: Unresolved MVar 'x.11'term must be fully elaborated before kernel checking
+✓ No type errors found
+
+=== Physika generated Pytorch code ===
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -57,7 +65,7 @@ def gaussian_solve(A, b):
     a_row = get_2d_array_num_rows(A)
     a_col = get_2d_array_num_cols(A)
     new_col = (a_col + 1)
-    aug = torch.zeros(int(a_row), int(new_col))
+    aug = torch.zeros(int(a_row), int(new_col), device=DEVICE)
     for i in range(int(0), int(a_row)):
         aug[int(i), :int(a_col)] = A[int(i), :]
         aug[int(i), int(a_col)] = b[int(i)]
@@ -81,7 +89,7 @@ def gaussian_solve(A, b):
         elimination_factors = (rows_below[:, int(i):int((i + 1))] / pivot_value)
         eliminated_rows = (rows_below - (elimination_factors * pivot_row))
         aug = torch.cat([aug[:int((i + 1)), :], eliminated_rows])
-    x = torch.zeros(int(0))
+    x = torch.zeros(int(0), device=DEVICE)
     for i in range(int(0), int(a_row)):
         idx = ((a_col - 1) - i)
         total = aug[int(idx), int(a_col)]
@@ -96,3 +104,6 @@ def gaussian_solve(A, b):
 A = torch.tensor([[1, 2, 1], [3, 1, (-1)], [2, (-1), 1]], device=DEVICE)
 b = torch.tensor([8, 2, 3], device=DEVICE)
 print(gaussian_solve(A, b))
+=== End Pytorch code ===
+
+[1.0, 2.0, 3.0] ∈ ℝ[3]
