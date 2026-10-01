@@ -132,7 +132,7 @@ General Derivation of the Loss in a Normalizing Flow
 
 **Maximum likelihood estimation (MLE)** [Wikipedia_MLE]_ finds the model parameters :math:`\theta` that make the observed data as likely as possible under the model.
 For a given dataset :math:`\{x_1, \ldots, x_M\}`, this means choosing :math:`\theta` to maximize the **likelihood** :math:`\prod_{j=1}^{M} p_\theta(x_j)`, where :math:`p_\theta(x_j)` is the probability the model assigns to the :math:`j`-th data point and :math:`\prod` denotes the product over all :math:`M` samples.
-Instead of multiplying many probabilities together, we take the logarithm turning the product into a sum. Maximizing this **log-likelihood** is the same as minimizing its negative, which gives us a loss function to minimize: 
+Instead of multiplying many probabilities together, we take the logarithm, turning the product into a sum. Maximizing this **log-likelihood** is the same as minimizing its negative, which gives us a loss function to minimize: 
 
 .. math::
     \mathcal{L}(\theta) = -\sum_{j=1}^{M} \log p_\theta(x_j)
@@ -209,7 +209,7 @@ This is not an exhaustive list, but below are some popular methods.
 
     The planar flow, while simple, runs into the following issues:
 
-        - The learned parameters :math:`u,w,b` and :math:`h`, need to be restricted to be invertible.
+        - The learned parameters :math:`u,w,b` and :math:`h` need to be restricted to be invertible.
         - Computing :math:`f^{-1}(z)` could be difficult analytically.
           If :math:`h` is a nonlinear activation (e.g. :math:`\tanh`), inverting :math:`f(z) = z + u\,h(w^\top z + b)` for :math:`z` requires solving an implicit nonlinear equation; there is generally no closed-form expression, and iterative numerical methods (e.g. fixed-point iteration) must be used instead.
 
@@ -249,7 +249,8 @@ This is not an exhaustive list, but below are some popular methods.
         .. code-block:: text
 
             def coupling(x: ℝ[d]): ℝ[d]:
-                x1, x2 = x[:n], x[n:]
+                x1: ℝ[n] = x[:n]
+                x2: ℝ[n] = x[n:]
                 s: ℝ[n] = linear(relu(linear(x1, W1_s, b1_s)), W2_s, b2_s)
                 m: ℝ[n] = linear(relu(linear(x1, W1_m, b1_m)), W2_m, b2_m)
                 return concat(x1, exp(s) * x2 + m)
@@ -264,7 +265,8 @@ This is not an exhaustive list, but below are some popular methods.
         .. code-block:: text
 
             def coupling_inv(y: ℝ[d]): ℝ[d]:
-                y1, y2 = x[:n], x[n:]
+                y1: ℝ[n]= y[:n]
+                y2: ℝ[n]= y[n:]
                 s: ℝ[n] = linear(relu(linear(y1, W1_s, b1_s)), W2_s, b2_s)
                 m: ℝ[n] = linear(relu(linear(y1, W1_m, b1_m)), W2_m, b2_m)
                 return concat(y1, (y2 - m) * exp(-s))
@@ -301,9 +303,9 @@ This is not an exhaustive list, but below are some popular methods.
         |\det \mathcal{J}| = 1 \cdot 1 \cdot e^{s_1} \cdot e^{s_2} = \exp(s_1 + s_2)
 
     **Non-volume preserving property:**
-    Unlike NICE, where the diagonal is all 1s and :math:`|\det \mathcal{J}| = 1`, the RealNVP coupling layer has :math:`|\det \mathcal{J}| = \exp(\sum_i s_i)` which is in general not equal to 1.
-    When :math:`s_i > 0` the transformation stretches along dimension :math:`i`; when :math:`s_i < 0` it compresses.
-    This makes the coupling layer **non-volume preserving**, it can both reshape *and* rescale the density, which is where the model's name comes from.
+    Unlike NICE, where the diagonal is all 1s and :math:`|\det \mathcal{J}| = 1`, the RealNVP coupling layer has :math:`|\det \mathcal{J}| = \exp(\sum_i s_i)`, which is in general not equal to 1.
+    When :math:`s_i > 0`, the transformation stretches along dimension :math:`i`; when :math:`s_i < 0`, it compresses.
+    This makes the coupling layer **non-volume preserving**; it can both reshape *and* rescale the density, which is where the model's name comes from.
     Because scaling is built into the coupling layers themselves, RealNVP does not need a separate diagonal scaling layer (unlike NICE).
 
     **Log-determinant:**
@@ -357,7 +359,7 @@ This is not an exhaustive list, but below are some popular methods.
         def λ(x: ℝ[d]) -> ℝ:
             z: ℝ[d] = forward_z(x)
             return log_pz(z, d) + log_det(x)
-        def loss(x: ℝ[784]): ℝ:
+        def loss(x: ℝ[d]): ℝ:
             return -λ(x)
         
     Minimizing :math:`\mathcal{L}` pushes the model to (a) map data points to high-density regions of the base distribution (via the :math:`\log p_Z` term) and (b) learn appropriate per-dimension scaling and shifting (via the :math:`\sum_k \sum_i s_i^{(k)}` term).
@@ -439,12 +441,14 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
     class RealNVP(W1_s: ℝ[h, n], b1_s: ℝ[h], W2_s: ℝ[n, h], b2_s: ℝ[n], W1_m: ℝ[h, n], b1_m: ℝ[h], W2_m: ℝ[n, h], b2_m: ℝ[n], n: ℕ, d: ℕ):
         def coupling(x: ℝ[d]): ℝ[d]:
-            x1, x2 = x[:this.n], x[this.n:]
+            x1: ℝ[n] = x[:this.n]
+            x2: ℝ[n] = x[this.n:]
             s: ℝ[n] = linear(relu(linear(x1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(x1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(x1, exp(s) * x2 + m)
         def coupling_inv(y: ℝ[d]): ℝ[d]:
-            y1, y2 = y[:this.n], y[this.n:]
+            y1: ℝ[n]= y[:this.n]
+            y2: ℝ[n]= y[this.n:]
             s: ℝ[n] = linear(relu(linear(y1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(y1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(y1, (y2 - m) * exp(-s))
@@ -462,7 +466,7 @@ The Full Code section contains the complete Physika code, which can be run as-is
         def sample(): ℝ[d]:
             z: ℝ[d] ~ Normal(0.0, 1.0, this.d)
             return this.inverse(z)
-        def loss(x: ℝ[784]): ℝ:
+        def loss(x: ℝ[d]): ℝ:
             return -this(x)
         def train(X: ℝ[160, 784], epochs: ℕ, lr: ℝ, len_train: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
@@ -515,10 +519,14 @@ So, when training the model, the entire training looks like the snippet below:
     d: ℝ, h: ℝ, n: ℝ = 784, 128, 392
     # He init, near-zero output so coupling starts near identity
     s1: ℝ, s2: ℝ = sqrt(2.0 / n), sqrt(2.0 / h) * 0.01
-    W1_s, W1_m = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n), for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
-    b1_s, b1_m = for i:ℕ(h) -> i*0, for i:ℕ(h) -> i*0
-    W2_s, W2_m = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h), for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
-    b2_s, b2_m = for i:ℕ(n) -> i*0, for i:ℕ(n) -> i*0
+    W1_s: ℝ[h, n] = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
+    W1_m: ℝ[h, n] = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
+    b1_s: ℝ[h] = for i:ℕ(h) -> i*0
+    b1_m: ℝ[h] = for i:ℕ(h) -> i*0
+    W2_s: ℝ[n, h]  = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
+    W2_m: ℝ[n, h]  = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
+    b2_s: ℝ[n] = for i:ℕ(n) -> i*0
+    b2_m: ℝ[n] = for i:ℕ(n) -> i*0
 
     realnvp: RealNVP = RealNVP(W1_s, b1_s, W2_s, b2_s, W1_m, b1_m, W2_m, b2_m, n, d)
 
@@ -589,8 +597,7 @@ Additionally, since Normalizing flows only work with continuous distributions, w
 
     # Helpers
     def len1d(x: ℝ[n]): ℝ:
-        total: ℝ = 0
-        temp: ℝ = 0
+        total: ℝ, temp: ℝ = 0, 0
         for i:
             temp = x[i]
             total += 1
@@ -620,8 +627,7 @@ Additionally, since Normalizing flows only work with continuous distributions, w
         return img
 
     def dequantize(x: ℝ[d], d: ℕ): ℝ[d]:
-        a: ℝ[1] = [0.0]
-        b: ℝ[1] = [1.0]
+        a: ℝ[1], b: ℝ[1] = [0.0], [1.0]
         u: ℝ[d] ~ 𝒰(a[0], b[0], d)
         return (x + u) / 256.0
 
@@ -629,8 +635,7 @@ Additionally, since Normalizing flows only work with continuous distributions, w
         return sum(-0.5 * x * x) - d * 0.5 * log(2.0 * 3.14159265)
 
     def concat(a: ℝ[na], b: ℝ[nb]): ℝ[d]:
-        la: ℝ = len1d(a)
-        lb: ℝ = len1d(b)
+        la: ℝ, lb: ℝ = len1d(a), len1d(b)
         d: ℝ = la + lb
         out: ℝ[d] = for i:ℕ(d) -> i*0
         out[:la] = a
@@ -640,12 +645,14 @@ Additionally, since Normalizing flows only work with continuous distributions, w
     # RealNVP, two networks scale (s) and shift (m)
     class RealNVP(W1_s: ℝ[h, n], b1_s: ℝ[h], W2_s: ℝ[n, h], b2_s: ℝ[n], W1_m: ℝ[h, n], b1_m: ℝ[h], W2_m: ℝ[n, h], b2_m: ℝ[n], n: ℕ, d: ℕ):
         def coupling(x: ℝ[d]): ℝ[d]:
-            x1, x2 = x[:this.n], x[this.n:]
+            x1: ℝ[n] = x[:this.n]
+            x2: ℝ[n] = x[this.n:]
             s: ℝ[n] = linear(relu(linear(x1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(x1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(x1, exp(s) * x2 + m)
         def coupling_inv(y: ℝ[d]): ℝ[d]:
-            y1, y2 = y[:this.n], y[this.n:]
+            y1: ℝ[n]= y[:this.n]
+            y2: ℝ[n]= y[this.n:]
             s: ℝ[n] = linear(relu(linear(y1, this.W1_s, this.b1_s)), this.W2_s, this.b2_s)
             m: ℝ[n] = linear(relu(linear(y1, this.W1_m, this.b1_m)), this.W2_m, this.b2_m)
             return concat(y1, (y2 - m) * exp(-s))
@@ -663,7 +670,7 @@ Additionally, since Normalizing flows only work with continuous distributions, w
         def sample(): ℝ[d]:
             z: ℝ[d] ~ Normal(0.0, 1.0, this.d)
             return this.inverse(z)
-        def loss(x: ℝ[784]): ℝ:
+        def loss(x: ℝ[d]): ℝ:
             return -this(x)
         def train(X: ℝ[160, 784], epochs: ℕ, lr: ℝ, len_train: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
@@ -710,10 +717,14 @@ Additionally, since Normalizing flows only work with continuous distributions, w
     d: ℝ, h: ℝ, n: ℝ = 784, 128, 392
     # He init, near-zero output so coupling starts near identity
     s1: ℝ, s2: ℝ = sqrt(2.0 / n), sqrt(2.0 / h) * 0.01
-    W1_s, W1_m = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n), for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
-    b1_s, b1_m = for i:ℕ(h) -> i*0, for i:ℕ(h) -> i*0
-    W2_s, W2_m = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h), for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
-    b2_s, b2_m = for i:ℕ(n) -> i*0, for i:ℕ(n) -> i*0
+    W1_s: ℝ[h, n] = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
+    W1_m: ℝ[h, n] = for i:ℕ(h) -> ε: ℝ[n] ~ Normal(0.0, s1, n)
+    b1_s: ℝ[h] = for i:ℕ(h) -> i*0
+    b1_m: ℝ[h] = for i:ℕ(h) -> i*0
+    W2_s: ℝ[n, h]  = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
+    W2_m: ℝ[n, h]  = for i:ℕ(n) -> ε: ℝ[h] ~ Normal(0.0, s2, h)
+    b2_s: ℝ[n] = for i:ℕ(n) -> i*0
+    b2_m: ℝ[n] = for i:ℕ(n) -> i*0
 
     realnvp: RealNVP = RealNVP(W1_s, b1_s, W2_s, b2_s, W1_m, b1_m, W2_m, b2_m, n, d)
     print(DEVICE)
