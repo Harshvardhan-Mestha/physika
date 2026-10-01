@@ -211,7 +211,6 @@ X = rand_array(10, 784, 1.0)
 epochs = 1
 lr = 0.001
 losses = deq.train(X, epochs, lr, images)
-loss_before = losses[int(0)]
-loss_after = losses[int((-1))]
+loss_before, loss_after = losses[int(0)], losses[int((-1))]
 print(print(loss_before))
 print(print(loss_after))

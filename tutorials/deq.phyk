@@ -96,8 +96,7 @@ X: ℝ[10, 784] = rand_array(10, 784, 1.0)
 epochs: ℕ = 1
 lr: ℝ = 0.001
 losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
-loss_before: ℝ = losses[0]
-loss_after: ℝ = losses[-1]
+loss_before: ℝ, loss_after: ℝ = losses[0], losses[-1]
 print(loss_before)
 print(loss_after)
 # add in runtime.py to plot losses, commented for CI    

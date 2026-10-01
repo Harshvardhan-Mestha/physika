@@ -20,7 +20,7 @@ A conventional deep network computes a sequence of hidden states, one per layer:
 .. math::
     h_1 = f_1(h_0, x), \quad h_2 = f_2(h_1, x), \quad \ldots, \quad h_T = f_T(h_{T-1}, x)
 
-Each layer :math:`f_t` usually has its own parameters, and the memory needed for training grows with the number of layers :math:`T`, because every intermediate :math:`h_t` must be stroed for the backward pass during gradient backpropagation.
+Each layer :math:`f_t` usually has its own parameters, and the memory needed for training grows with the number of layers :math:`T`, because every intermediate :math:`h_t` must be stored for the backward pass during gradient backpropagation.
 
 A Deep Equilibrium Model is built from two ideas that work together.
 The first idea is to tie the weights, so every layer is the same function :math:`f(\cdot, x, \theta)`.
@@ -46,7 +46,7 @@ Setup and Notation
 
 We use the following notation throughout the tutorial.
 
-The input is denoted by :math:`x \in \mathbb{R}^{d}`. It is the data the network is given, :math:`d` denotes the dimensionality of the data. 
+The input is denoted by :math:`x \in \mathbb{R}^{d}`. It is the data the network is given; :math:`d` denotes the dimensionality of the data. 
 The hidden state of the model is denoted by :math:`h \in \mathbb{R}^{n}`. It is updated to learn a better representation of the data .
 The parameters of the model :math:`\theta` collect every learnable weight and bias in the layer. In our DEQ model :math:`\theta = \{W, U, b, W_o, b_o\}`.
 The layer itself is a function :math:`f: \mathbb{R}^{n} \times \mathbb{R}^{d} \to \mathbb{R}^{n}`, which takes the current hidden state and the (fixed) input and returns the next hidden state.
@@ -91,7 +91,7 @@ In Physika, the layer is written exactly as the equation reads:
            h2: ℝ[1,n] = linear(h1, W2, b2)
            return h2
 
-    For additional details, please read the Physika implementation of a `fully connected network <https://physika.readthedocs.io/en/latest/tutorials/linear_layers.html>`__.
+   For additional details, please read the Physika implementation of a `fully connected network <https://physika.readthedocs.io/en/latest/tutorials/linear_layers.html>`__.
 
 Fixed Points and the Banach Fixed-Point Theorem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -175,7 +175,7 @@ In Physika, the residual is implemented as shown below, where ``h_star`` denotes
     g(h_k - \delta) \approx g(h_k) - J\,\delta,
 
 where :math:`J = \partial g / \partial h` is the **residual Jacobian**, the matrix of partial derivatives of :math:`g` with respect to :math:`h`.
-Newton's method picks the step :math:`\delta` that makes this linear approximation zero; that is it solves
+Newton's method picks the step :math:`\delta` that makes this linear approximation zero; that is, it solves
 
 .. math::
     J\,\delta = g(h_k), \qquad h_{k+1} = h_k - \delta.
@@ -419,7 +419,7 @@ So when training the model, the entire training looks like the snippet below; sh
 
 Plotting Graphs
 -----------------------------------
-Once training is done, it is useful to visualize metrics such as the loss for each epoch, and the loss before and after training, as it tells us if the model is training properly. 
+Once training is done, it is useful to visualize metrics such as the loss for each epoch and the loss before and after training, as it tells us if the model is training properly. 
 
 .. note::
    ``plot_deq_losses`` is not a built-in Physika function. To use it, add the following helper to ``physika/runtime.py``:
@@ -457,7 +457,7 @@ Full Code
 ---------
 
 Here we load 50 images of MNIST, train the DEQ for 20 epochs, and plot the training curve and the reconstruction loss before and after training.
-We keep the learning rate (``lr``) at ``0.001``, the number of solver steps at (``solver_steps``) ``3``, and the hidden size at ``8`` as the hyperparameters. 
+We keep the learning rate (``lr``) at ``0.001``, the number of solver steps (``solver_steps``) at ``3``, and the hidden size (``n``) at ``8`` as the hyperparameters. 
 The ``rand_array`` helper is used to initialize the learnable parameters with small random values.
 The first line ``physika.seed(0)`` ensures that training runs can be reproduced exactly, without variations across runs. 
 More details on this can be found in the `Sampling documentation <https://physika.readthedocs.io/en/latest/elf.html#random-sampling>`__.
@@ -518,7 +518,7 @@ More details on this can be found in the `Sampling documentation <https://physik
         def loss(target: ℝ[1,d], x_hat: ℝ[1,d]): ℝ:
             err: ℝ[1,d] = target - x_hat
             return sum_2d(err * err, 1, d)
-        def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
                 total = 0
@@ -555,16 +555,10 @@ More details on this can be found in the `Sampling documentation <https://physik
     # add load_mnist python helper to physika/runtime.py to run on MNIST data
     X: ℝ[50, 784] = load_mnist(images) 
 
-    x0: ℝ[1,784] = [X[0]]
-    recon_before: ℝ[1,784] = deq(x0)
-    loss_before: ℝ = deq.loss(x0, recon_before)
-    print(loss_before)
-
     epochs: ℕ = 20
     lr: ℝ = 0.001
     losses: ℝ[epochs] = deq.train(X, epochs, lr, images)
-    loss_before: ℝ = losses[0]
-    loss_after: ℝ = losses[-1]
+    loss_before: ℝ, loss_after: ℝ = losses[0], losses[-1]
     print(loss_before)
     print(loss_after)
     # add plot_deq_losses python helper to physika/runtime.py to create and save plots
@@ -574,7 +568,7 @@ More details on this can be found in the `Sampling documentation <https://physik
 Training plots
 --------------
 
-After running the code above (~30 minutes), you should see the average reconstruction loss decrease over epochs as the model learns to encode and decode the digits through its equilibrium state.
+After running the code above (~10 minutes), you should see the average reconstruction loss decrease over epochs as the model learns to encode and decode the digits through its equilibrium state.
 
 .. figure:: /_static/tutorial_files/deq/deq_train_plot.png
    :alt:
