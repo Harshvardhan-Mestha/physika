@@ -7,8 +7,7 @@ from physika.runtime import print
 
 # === Functions ===
 def len1d(x):
-    total = 0
-    temp = 0
+    total, temp = 0, 0
     for i in range(len(x)):
         temp = x[int(i)]
         total = total + 1
@@ -38,8 +37,7 @@ def unflatten(x, rows, cols):
     return img
 
 def dequantize(x, d):
-    a = torch.tensor([0.0], device=DEVICE)
-    b = torch.tensor([1.0], device=DEVICE)
+    a, b = torch.tensor([0.0], device=DEVICE), torch.tensor([1.0], device=DEVICE)
     u = torch.distributions.Uniform(a[int(0)], b[int(0)]).rsample((int(d),))
     return ((x + u) / 256.0)
 
@@ -47,8 +45,7 @@ def log_pz(x, d):
     return (torch.sum((((-0.5) * x) * x) if isinstance((((-0.5) * x) * x), torch.Tensor) else torch.tensor(float((((-0.5) * x) * x)))) - ((d * 0.5) * torch.log((2.0 * 3.14159265) if isinstance((2.0 * 3.14159265), torch.Tensor) else torch.tensor(float((2.0 * 3.14159265))))))
 
 def concat(a, b):
-    la = len1d(a)
-    lb = len1d(b)
+    la, lb = len1d(a), len1d(b)
     d = (la + lb)
     out = torch.stack([(i * 0) for _fi_i in range(int(d)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
     out[:int(la)] = a
@@ -74,7 +71,8 @@ class RealNVP(nn.Module):
     def coupling(self, x):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
-        x1, x2 = x[:int(self.n)], x[int(self.n):]
+        x1 = x[:int(self.n)]
+        x2 = x[int(self.n):]
         s = linear(relu(linear(x1, self.W1_s, self.b1_s)), self.W2_s, self.b2_s)
         m = linear(relu(linear(x1, self.W1_m, self.b1_m)), self.W2_m, self.b2_m)
         return torch.cat([x1, ((torch.exp(s if isinstance(s, torch.Tensor) else torch.tensor(float(s))) * x2) + m)])
@@ -82,7 +80,8 @@ class RealNVP(nn.Module):
     def coupling_inv(self, y):
         this = self
         y = torch.as_tensor(y, device=DEVICE).float()
-        y1, y2 = y[:int(self.n)], y[int(self.n):]
+        y1 = y[:int(self.n)]
+        y2 = y[int(self.n):]
         s = linear(relu(linear(y1, self.W1_s, self.b1_s)), self.W2_s, self.b2_s)
         m = linear(relu(linear(y1, self.W1_m, self.b1_m)), self.W2_m, self.b2_m)
         return torch.cat([y1, ((y2 - m) * torch.exp((-s) if isinstance((-s), torch.Tensor) else torch.tensor(float((-s)))))])
@@ -178,14 +177,18 @@ class RealNVP(nn.Module):
 # === Program ===
 torch.manual_seed(int(0))
 train_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(10)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-test_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(5)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-len_train, len_test = 10, 5
+test_X = torch.stack([torch.stack([torch.stack([(k * 0) for _fi_k in range(int(28)) for k in [torch.tensor(float(_fi_k), device=DEVICE)]]) for _fi_j in range(int(28)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(11)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+len_train, len_test = 10, 11
 d, h, n = 784, 128, 392
 s1, s2 = torch.sqrt((2.0 / n) if isinstance((2.0 / n), torch.Tensor) else torch.tensor(float((2.0 / n)))), (torch.sqrt((2.0 / h) if isinstance((2.0 / h), torch.Tensor) else torch.tensor(float((2.0 / h)))) * 0.01)
-W1_s, W1_m = torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]]), torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-b1_s, b1_m = torch.stack([(i * 0) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]]), torch.stack([(i * 0) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-W2_s, W2_m = torch.stack([torch.distributions.Normal(0.0, s2).rsample((int(h),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]]), torch.stack([torch.distributions.Normal(0.0, s2).rsample((int(h),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-b2_s, b2_m = torch.stack([(i * 0) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]]), torch.stack([(i * 0) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+W1_s = torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+W1_m = torch.stack([torch.distributions.Normal(0.0, s1).rsample((int(n),)) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+b1_s = torch.stack([(i * 0) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+b1_m = torch.stack([(i * 0) for _fi_i in range(int(h)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+W2_s = torch.stack([torch.distributions.Normal(0.0, s2).rsample((int(h),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+W2_m = torch.stack([torch.distributions.Normal(0.0, s2).rsample((int(h),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+b2_s = torch.stack([(i * 0) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+b2_m = torch.stack([(i * 0) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 realnvp = RealNVP(W1_s, b1_s, W2_s, b2_s, W1_m, b1_m, W2_m, b2_m, n, d).to(DEVICE)
 print(print(DEVICE))
 train_flat = torch.stack([torch.stack([(j * 0) for _fi_j in range(int(d)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(len_train)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
