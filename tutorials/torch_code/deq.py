@@ -11,6 +11,13 @@ def tanh(a):
     denom = (torch.exp(a if isinstance(a, torch.Tensor) else torch.tensor(float(a))) + torch.exp((-a) if isinstance((-a), torch.Tensor) else torch.tensor(float((-a)))))
     return (num / denom)
 
+def sum_2d(a, p, q):
+    s = 0.0
+    for i in range(int(0), int(p)):
+        for j in range(int(0), int(q)):
+            s = s + a[int(i), int(j)]
+    return s
+
 def rand_array(n, m, μ):
     return torch.stack([torch.distributions.Normal(0.0, μ).rsample((int(m),)) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 
@@ -31,50 +38,94 @@ def df_dh(W, tanh_prime, n=None):
         n = int(W.shape[0])
     return torch.stack([torch.as_tensor(torch.stack([torch.as_tensor((W[int(r)][int(c)] * tanh_prime[int(0)][int(c)])) for c in range(int(n))]).float()) for r in range(int(n))])
 
-def linsolve(A, b):
-    aug = zeros2d(8, 9)
-    for i in range(int(0), int(8)):
-        for c in range(int(0), int(8)):
-            aug[int(i), int(c)] = A[int(i), int(c)]
-        aug[int(i), int(8)] = b[int(i)]
-    for i in range(int(0), int(8)):
-        piv = zeros1d(9)
-        for c in range(int(0), int(9)):
-            piv[int(c)] = aug[int(i), int(c)]
-        aug_next = zeros2d(8, 9)
-        for r in range(int(0), int(8)):
-            if r == i:
-                for c in range(int(0), int(9)):
-                    aug_next[int(r), int(c)] = (piv[int(c)] / piv[int(i)])
-            else:
-                fac = (aug[int(r), int(i)] / piv[int(i)])
-                for c in range(int(0), int(9)):
-                    aug_next[int(r), int(c)] = (aug[int(r), int(c)] - (fac * piv[int(c)]))
-        aug = aug_next
-    x = zeros1d(8)
-    for i in range(int(0), int(8)):
-        idx = (7 - i)
-        total = aug[int(idx), int(8)]
-        for j in range(int((idx + 1)), int(8)):
-            total = (total - (aug[int(idx), int(j)] * x[int(j)]))
-        x_next = zeros1d(8)
-        for c in range(int(0), int(8)):
-            if c == idx:
-                x_next[int(c)] = (total / aug[int(idx), int(idx)])
-            else:
-                x_next[int(c)] = x[int(c)]
-        x = x_next
+def gaussian_solve(A, b):
+    a_row = get_2d_array_num_rows(A)
+    a_col = get_2d_array_num_cols(A)
+    new_col = (a_col + 1)
+    aug = torch.zeros(int(a_row), int(new_col), device=DEVICE)
+    for i in range(int(0), int(a_row)):
+        aug[int(i), :int(a_col)] = A[int(i), :]
+        aug[int(i), int(a_col)] = b[int(i)]
+    for i in range(int(0), int(a_row)):
+        max_row = i
+        for k in range(int((i + 1)), int(a_row)):
+            if torch.abs(aug[int(k), int(i)] if isinstance(aug[int(k), int(i)], torch.Tensor) else torch.tensor(float(aug[int(k), int(i)]))) > torch.abs(aug[int(max_row), int(i)] if isinstance(aug[int(max_row), int(i)], torch.Tensor) else torch.tensor(float(aug[int(max_row), int(i)]))):
+                max_row = k
+        if max_row != i:
+            lo = min(i, max_row)
+            hi = max(i, max_row)
+            rows_above = aug[:int(lo), :]
+            pivot_row = aug[int(hi):int((hi + 1)), :]
+            rows_between = aug[int((lo + 1)):int(hi), :]
+            current_row = aug[int(lo):int((lo + 1)), :]
+            rows_below = aug[int((hi + 1)):, :]
+            aug = torch.cat([rows_above, pivot_row, rows_between, current_row, rows_below])
+        pivot_row = aug[int(i):int((i + 1)), :]
+        pivot_value = aug[int(i), int(i)]
+        rows_below = aug[int((i + 1)):, :]
+        elimination_factors = (rows_below[:, int(i):int((i + 1))] / pivot_value)
+        eliminated_rows = (rows_below - (elimination_factors * pivot_row))
+        aug = torch.cat([aug[:int((i + 1)), :], eliminated_rows])
+    x = torch.zeros(int(0), device=DEVICE)
+    for i in range(int(0), int(a_row)):
+        idx = ((a_col - 1) - i)
+        total = aug[int(idx), int(a_col)]
+        for j in range(int((idx + 1)), int(a_row)):
+            total = (total - (aug[int(idx), int(j)] * x[int(((j - idx) - 1))]))
+        val = (total / aug[int(idx), int(idx)])
+        val = torch.reshape(val, (1,) if isinstance(1, int) else 1)
+        x = torch.cat([val, x])
     return x
+
+def get_2d_array_num_rows(x):
+    total = 0
+    temp = 0
+    for i in range(len(x)):
+        temp = x[int(i)]
+        total = total + 1
+    return total
+
+def get_2d_array_num_cols(x, m=None, n=None):
+    if m is None:
+        m = int(x.shape[0])
+    if n is None:
+        n = int(x.shape[1])
+    return get_1d_array_length(x[int(0)])
+
+def get_1d_array_length(x):
+    total = 0
+    temp = 0
+    for i in range(len(x)):
+        temp = x[int(i)]
+        total = total + 1
+    return total
+
+def zero_2d_array(rows, cols):
+    results = torch.stack([torch.stack([(j * 0) for _fi_j in range(int(cols)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(rows)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    return results
+
+def zero_1d_array(len):
+    results = torch.stack([(i * 0) for _fi_i in range(int(len)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    return results
+
+def max(x, y):
+    if x > y:
+        return x
+    else:
+        return y
 
 # === Classes ===
 class DEQ(nn.Module):
-    def __init__(self, W, U, b, Wo, bo):
+    def __init__(self, W, U, b, Wo, bo, n, d, solver_steps):
         super().__init__()
         self.W = nn.Parameter(torch.as_tensor(W))
         self.U = nn.Parameter(torch.as_tensor(U))
         self.b = nn.Parameter(torch.as_tensor(b))
         self.Wo = nn.Parameter(torch.as_tensor(Wo))
         self.bo = nn.Parameter(torch.as_tensor(bo))
+        self.n = int(n)
+        self.d = int(d)
+        self.solver_steps = int(solver_steps)
         self.learnable_params = [self.W, self.U, self.b, self.Wo, self.bo]
         self.h_star = None
 
@@ -87,14 +138,13 @@ class DEQ(nn.Module):
     def equilibrium(self, x):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
-        num_solver_steps = 3
-        self.h_star = zeros2d(1, 8)
+        self.h_star = zeros2d(1, self.n)
         f_h = self.f(self.h_star, x)
         tanh_prime = (1.0 - (f_h * f_h))
-        J = (df_dh(self.W, tanh_prime) - eye(8))
-        for k in range(int(0), int(num_solver_steps)):
+        J = (df_dh(self.W, tanh_prime) - eye(self.n))
+        for k in range(int(0), int(self.solver_steps)):
             g = (self.f(self.h_star, x) - self.h_star)
-            delta = linsolve(J, g[int(0)])
+            delta = gaussian_solve(J, g[int(0)])
             self.h_star = (self.h_star - torch.stack([torch.as_tensor(delta)]))
         return self.h_star
 
@@ -108,8 +158,8 @@ class DEQ(nn.Module):
         this = self
         target = torch.as_tensor(target, device=DEVICE).float()
         x_hat = torch.as_tensor(x_hat, device=DEVICE).float()
-        diff = (target - x_hat)
-        return torch.sum((diff * diff) if isinstance((diff * diff), torch.Tensor) else torch.tensor(float((diff * diff))))
+        err = (target - x_hat)
+        return sum_2d((err * err), 1, self.d)
 
     def train(self, X, epochs, lr, images):
         this = self
@@ -118,17 +168,15 @@ class DEQ(nn.Module):
         images = torch.as_tensor(images, device=DEVICE).float()
         losses = torch.stack([(i * 0) for _fi_i in range(int(epochs)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
         for epoch in range(int(0), int(epochs)):
+            total = 0
             for i in range(int(0), int(images)):
                 x = torch.stack([torch.as_tensor(X[int(i)])])
                 preds = self(x)
                 L = self.loss(x, preds)
                 learnable_grads = compute_grad(L, self.learnable_params)
                 self.update_params(lr, learnable_grads)
-            total = 0
-            for i in range(int(0), int(images)):
-                x = torch.stack([torch.as_tensor(X[int(i)])])
-                pred = self(x)
-                total = total + self.loss(x, pred)
+                new_preds = self(x)
+                total = total + self.loss(x, new_preds)
             epoch_loss = (total / images)
             losses[int(epoch)] = epoch_loss
             print(epoch_loss)
@@ -148,34 +196,22 @@ class DEQ(nn.Module):
         with torch.no_grad():
             self.bo.copy_((self.bo - (lr * learnable_grads[int(4)])))
 
-    @property
-    def params(self):
-        return list(self.parameters())
-
-    def update(self, lr, grads):
-        with torch.no_grad():
-            for p, g in zip(self.parameters(), grads):
-                if g is not None:
-                    p -= lr * g
-
 # === Program ===
 torch.manual_seed(int(0))
 print(print(DEVICE))
-W = rand_array(8, 8, 0.01)
-U = rand_array(784, 8, 0.02)
-b = zeros2d(1, 8)
-Wo = rand_array(8, 784, 0.05)
-bo = zeros2d(1, 784)
-deq = DEQ(W, U, b, Wo, bo).to(DEVICE)
-images = 50
-X = rand_array(50, 784, 1.0)
-x0 = torch.stack([torch.as_tensor(X[int(0)])])
-recon_before = deq(x0)
-loss_before = deq.loss(x0, recon_before)
-print(print(loss_before))
+d, n, solver_steps = 784, 8, 3
+W = rand_array(n, n, 0.01)
+U = rand_array(d, n, 0.02)
+b = zeros2d(1, n)
+Wo = rand_array(n, d, 0.05)
+bo = zeros2d(1, d)
+deq = DEQ(W, U, b, Wo, bo, n, d, solver_steps).to(DEVICE)
+images = 10
+X = rand_array(10, 784, 1.0)
 epochs = 1
 lr = 0.001
 losses = deq.train(X, epochs, lr, images)
-recon_after = deq(x0)
-loss_after = deq.loss(x0, recon_after)
+loss_before = losses[int(0)]
+loss_after = losses[int((-1))]
+print(print(loss_before))
 print(print(loss_after))
