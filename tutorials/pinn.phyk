@@ -5,7 +5,7 @@ def tanh(a: ℝ[p,q]): ℝ[p,q]:
     denom: ℝ[p,q] = exp(a) + exp(-a)
     return num / denom
 
-def linear(x: ℝ[1,i], W: ℝ[i,o], b: ℝ[1,o]): ℝ[1,o]:
+def linear(x: ℝ[1,li], W: ℝ[li,lo], b: ℝ[1,lo]): ℝ[1,lo]:
     return x @ W + b
 
 def rand2d(n: ℝ, m: ℝ, σ: ℝ): ℝ[n,m]:
@@ -14,10 +14,9 @@ def rand2d(n: ℝ, m: ℝ, σ: ℝ): ℝ[n,m]:
 def zeros2d(n: ℝ, m: ℝ): ℝ[n,m]:
     return for i:ℕ(n) -> for j:ℕ(m) -> j*0.0
 
-class PINN(W1: ℝ[2,H], b1: ℝ[1,H], W2: ℝ[H,1], b2: ℝ[1,1]):
+class PINN(wt: ℝ[1,H], wx: ℝ[1,H], b1: ℝ[1,H], W2: ℝ[H,1], b2: ℝ[1,1]):
     def u(t: ℝ, x: ℝ): ℝ:
-        p: ℝ[1,2] = [[t, x]]
-        h: ℝ[1,H] = tanh(linear(p, this.W1, this.b1))
+        h: ℝ[1,H] = tanh(t * this.wt + x * this.wx + this.b1)
         o: ℝ[1,1] = linear(h, this.W2, this.b2)
         return o[0,0]
     def f(t: ℝ, x: ℝ): ℝ:
@@ -33,17 +32,17 @@ class PINN(W1: ℝ[2,H], b1: ℝ[1,H], W2: ℝ[H,1], b2: ℝ[1,1]):
         for i:ℕ(100):
             out[i] = this.u(t, Xg[i])
         return out
-    def loss(Tu: ℝ[100], Xu: ℝ[100], Uu: ℝ[100], Tf: ℝ[10000], Xf: ℝ[10000]): ℝ:
+    def loss(Tu: ℝ[100], Xu: ℝ[100], Uu: ℝ[100], Tf: ℝ[500], Xf: ℝ[500]): ℝ:
         mse_u: ℝ = 0.0
         for i:ℕ(100):
-            r: ℝ = this.u(Tu[i], Xu[i]) - Uu[i]
+            r = this.u(Tu[i], Xu[i]) - Uu[i]
             mse_u += r * r
         mse_f: ℝ = 0.0
-        for i:ℕ(10000):
-            fi: ℝ = this.f(Tf[i], Xf[i])
+        for i:ℕ(500):
+            fi = this.f(Tf[i], Xf[i])
             mse_f += fi * fi
-        return mse_u / 100.0 + mse_f / 10000.0
-    def train(Tu: ℝ[100], Xu: ℝ[100], Uu: ℝ[100], Tf: ℝ[10000], Xf: ℝ[10000], epochs: ℕ, lr: ℝ): ℝ[epochs]:
+        return mse_u / 100.0 + mse_f / 500.0
+    def train(Tu: ℝ[100], Xu: ℝ[100], Uu: ℝ[100], Tf: ℝ[500], Xf: ℝ[500], epochs: ℕ, lr: ℝ): ℝ[epochs]:
         losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
         for epoch:ℕ(epochs):
             L = this.loss(Tu, Xu, Uu, Tf, Xf)
@@ -54,19 +53,21 @@ class PINN(W1: ℝ[2,H], b1: ℝ[1,H], W2: ℝ[H,1], b2: ℝ[1,1]):
             print(epoch_loss)
         return losses
     def update_params(lr: ℝ, learnable_grads: ℝ[m]):
-        this.W1 = this.W1 - lr * learnable_grads[0]
-        this.b1 = this.b1 - lr * learnable_grads[1]
-        this.W2 = this.W2 - lr * learnable_grads[2]
-        this.b2 = this.b2 - lr * learnable_grads[3]
+        this.wt = this.wt - lr * learnable_grads[0]
+        this.wx = this.wx - lr * learnable_grads[1]
+        this.b1 = this.b1 - lr * learnable_grads[2]
+        this.W2 = this.W2 - lr * learnable_grads[3]
+        this.b2 = this.b2 - lr * learnable_grads[4]
 
-H: ℝ = 256
+H: ℝ = 32
 s1: ℝ = sqrt(2.0 / (2.0 + H))
 s2: ℝ = sqrt(2.0 / (H + 1.0))
-W1: ℝ[2,H] = randn(2, H, s1)
-b1: ℝ[1,H] = zeros(1, H)
-W2: ℝ[H,1] = randn(H, 1, s2)
-b2: ℝ[1,1] = zeros(1, 1)
-pinn: PINN = PINN(W1, b1, W2, b2)
+wt: ℝ[1,H] = rand2d(1, H, s1)
+wx: ℝ[1,H] = rand2d(1, H, s1)
+b1: ℝ[1,H] = zeros2d(1, H)
+W2: ℝ[H,1] = rand2d(H, 1, s2)
+b2: ℝ[1,1] = zeros2d(1, 1)
+pinn: PINN = PINN(wt, wx, b1, W2, b2)
 print(DEVICE)
 
 Ni: ℝ = 50
@@ -75,19 +76,19 @@ Tu: ℝ[100] = for i:ℕ(100) -> i*0.0
 Xu: ℝ[100] = for i:ℕ(100) -> i*0.0
 Uu: ℝ[100] = for i:ℕ(100) -> i*0.0
 for j:ℕ(Ni):
-    xj: ℝ = -1.0 + 2.0 * j / (Ni - 1)
+    xj = -1.0 + 2.0 * j / (Ni - 1)
     Xu[j] = xj
     Uu[j] = -sin(3.14159265 * xj)
 for k:ℕ(Nb):
-    tk: ℝ = k / (Nb - 1)
+    tk = k / (Nb - 1)
     Tu[Ni + k] = tk
     Xu[Ni + k] = -1.0
     Tu[Ni + Nb + k] = tk
     Xu[Ni + Nb + k] = 1.0
-Tf: ℝ[10000] ~ 𝒰(0.0, 1.0, 10000)
-Xf: ℝ[10000] ~ 𝒰(-1.0, 1.0, 10000)
+Tf: ℝ[500] ~ 𝒰(0.0, 1.0, 500)
+Xf: ℝ[500] ~ 𝒰(-1.0, 1.0, 500)
 
-epochs: ℕ = 20000
+epochs: ℕ = 200
 lr: ℝ = 0.001
 losses: ℝ[epochs] = pinn.train(Tu, Xu, Uu, Tf, Xf, epochs, lr)
 
