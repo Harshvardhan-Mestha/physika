@@ -76,7 +76,7 @@ class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: 
         this.bo = this.bo - lr * learnable_grads[4]
 
 print(DEVICE)
-d: ℝ, n: ℝ, solver_steps: ℝ  = 784, 8, 3
+d, n, solver_steps: ℝ = 784, 8, 3
 
 W: ℝ[n,n] = rand_array(n, n, 0.01)
 U: ℝ[d,n] = rand_array(d, n, 0.02)

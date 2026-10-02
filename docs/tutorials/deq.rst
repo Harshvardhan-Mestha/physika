@@ -397,7 +397,7 @@ So when training the model, the entire training looks like the snippet below; sh
 
 .. code-block:: text
 
-    d: ℝ, n: ℝ, solver_steps: ℝ  = 784, 8, 3
+    d, n, solver_steps: ℝ = 784, 8, 3
     W: ℝ[n,n] = rand_array(n, n, 0.01)
     U: ℝ[d,n] = rand_array(d, n, 0.02)
     b: ℝ[1,n] = zeros2d(1, n)
@@ -542,7 +542,7 @@ More details on this can be found in the `Sampling documentation <https://physik
             this.bo = this.bo - lr * learnable_grads[4]
 
     print(DEVICE)
-    d: ℝ, n: ℝ, solver_steps: ℝ  = 784, 8, 3
+    d, n, solver_steps: ℝ = 784, 8, 3
 
     W: ℝ[n,n] = rand_array(n, n, 0.01)
     U: ℝ[d,n] = rand_array(d, n, 0.02)
