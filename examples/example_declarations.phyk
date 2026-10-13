@@ -71,9 +71,9 @@ print(c_vector)
 
 
 # -----------------------
-# string type (String)
-# notations: String
+# string type (string)
+# notations: string
 # -----------------------
 
-name: String = "physika"
+name: string = "physika"
 print(name)
