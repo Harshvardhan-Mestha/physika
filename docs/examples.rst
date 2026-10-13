@@ -30,7 +30,7 @@ the lexer maps all of them to the same underlying type:
 - Natural (ℕ): ``ℕ``, ``\mathbb{N}``, ``\N`` or ``N``
 - Complex (ℂ): ``ℂ``, ``\mathbb{C}``
 - list : ``list``
-- string: ``String``
+- string: ``string``
 
 .. note::
 
@@ -55,8 +55,8 @@ Complex: ℂ
 .. literalinclude:: ../examples/example_complex.phyk
    :language: text
 
-string: String
-~~~~~~~~~~~~~~~~
+string
+~~~~~~
 
 .. literalinclude:: ../examples/example_strings.phyk
    :language: text
