@@ -1,5 +1,5 @@
 # =======================================================
-# String data type in Physika
+# string data type in Physika
 # 
 # This Physika file showcases how you can use string  
 # data types
@@ -18,9 +18,9 @@
 # --------------------
 
 
-empty_string: String = ""
-name: String = "Physika"
-msg: String = "Hello, World!"
+empty_string: string = ""
+name: string = "Physika"
+msg: string = "Hello, World!"
 
 print(empty_string)
 print(name)
@@ -31,10 +31,10 @@ print(msg)
 # Concatenation
 # --------------------
 
-first_name: String = "Physika"
-last_name: String = "Language"
+first_name: string = "Physika"
+last_name: string = "Language"
 
-full_name: String = first_name + " " + last_name
+full_name: string = first_name + " " + last_name
 
 print(full_name)
 
@@ -44,8 +44,8 @@ print(full_name)
 # Simple indexing
 # --------------------
 
-first_character: String = name[0]
-third_character: String = name[2]
+first_character: string = name[0]
+third_character: string = name[2]
 
 print(first_character)
 print(third_character)
@@ -55,10 +55,10 @@ print(third_character)
 # strings slicing
 # --------------------
 
-first_part: String = full_name[:7]
-last_part: String = full_name[8:]
-full_slice: String = full_name[:]
-neg_slice: String = full_name[-1]
+first_part: string = full_name[:7]
+last_part: string = full_name[8:]
+full_slice: string = full_name[:]
+neg_slice: string = full_name[-1]
 
 
 
