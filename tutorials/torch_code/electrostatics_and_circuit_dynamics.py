@@ -19,9 +19,9 @@ def F(q1, q2, x1, x2):
 def E(q1, x1, x2):
     return (((1 / ((4 * π) * ε0)) * (q1 / (dist_3d(x1, x2) ** 2))) * ((x2 - x1) / dist_3d(x1, x2)))
 
-def E_n(n, q, x, x2):
+def E_n(q, x, x2):
     total = torch.tensor([0.0, 0.0, 0.0], device=DEVICE)
-    for i in range(int(0), int(n)):
+    for i in range(len(q)):
         total = total + E(q[int(i)], x[int(i)], x2)
     return total
 
@@ -68,7 +68,7 @@ print(print(dE_dx2))
 n = 10
 q = sample_normal1D(n)
 x = sample_normal3D(n)
-coulomb_e_n = E_n(n, q, x, torch.tensor([1, 1, 1], device=DEVICE))
+coulomb_e_n = E_n(q, x, torch.tensor([1, 1, 1], device=DEVICE))
 print(print(coulomb_e_n))
 Capa, Ress, V0 = 1.0, 10.0, 10.0
 Δt = 0.01

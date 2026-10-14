@@ -46,14 +46,13 @@ dE_dx2: ℝ[3] = grad(E(q1, x1, x2), x2)
 print(coulomb_e)
 print(dE_dx2)
 
-# n: Number of point charges in the system
 # q: Charge of each of the n points
 # x: Positions of each of the n points
 # x2: Position where total electric field is evaluated
 # Electric Field due to many point charges
-def E_n(n: ℝ, q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
+def E_n(q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
     total: ℝ[3] = [0.0, 0.0, 0.0]
-    for i: ℕ(n):
+    for i:
         total += E(q[i], x[i], x2)
     return total
 
@@ -67,10 +66,10 @@ def sample_normal3D(x: ℝ): ℝ[p, m]:
     return t
 
 n: ℝ = 10
-q : ℝ[3] = sample_normal1D(n)
-x : ℝ[3, 3] = sample_normal3D(n)
+q : ℝ[10] = sample_normal1D(n)
+x : ℝ[10, 3] = sample_normal3D(n)
 
-coulomb_e_n: ℝ[3] = E_n(n, q, x, [1, 1, 1])
+coulomb_e_n: ℝ[3] = E_n(q, x, [1, 1, 1])
 print(coulomb_e_n)
 
 # ----------

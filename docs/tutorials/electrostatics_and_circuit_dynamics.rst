@@ -26,7 +26,7 @@ Electrostatic Force
 
 The force exerted on a point charge :math:`q_2` at position
 :math:`\mathbf{x}_2` by a point charge :math:`q_1` at position
-:math:`\mathbf{x}_1` is
+:math:`\mathbf{x}_1` is [coulomb]_
 
 .. math::
 
@@ -63,7 +63,7 @@ Electric Field
 ~~~~~~~~~~~~~~
 
 The electric field produced by a point charge :math:`q_1` at position
-:math:`\mathbf{x}_1`, evaluated at a point :math:`\mathbf{x}_2`, is:
+:math:`\mathbf{x}_1`, evaluated at a point :math:`\mathbf{x}_2`, is [coulomb]_ :
 
 .. math::
 
@@ -91,10 +91,10 @@ Output:
 Sum of Electric field on a point due to multiple charges
 --------------------------------------------------------
 
-Consider a collection of :math:`N` particles each of which has charge
+Consider a collection of :math:`n` particles each of which has charge
 :math:`q_i` and is located at location :math:`x_i`. These particles create an
 electric field :math:`E` which extends throughout the system. We can measure
-its combined effect using:
+its combined effect using [coulomb]_ :
 
 .. math::
 
@@ -111,26 +111,22 @@ Where:
 - :math:`q_i` is the i-th source charge.
 - :math:`x_i` is the position of the i-th source charge.
 - :math:`x_2` is the observation point.
-- :math:`E_total` is the net electric field, obtained by summing the contributions from all n charges.
+- :math:`\vec{E}_{\mathrm{total}}` is the net electric field, obtained by summing the contributions from all n charges.
 
 .. code:: text
 
-    def E_n(n: ℝ, q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
+    def E_n(q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
         total: ℝ[3] = [0.0, 0.0, 0.0]
-        for i: ℕ(n):
+        for i:
             total += E(q[i], x[i], x2)
         return total
 
     n: ℝ = 10
-    q: ℝ[3] = sample_normal1D(n)
-    x: ℝ[3, 3] = sample_normal3D(n)
+    q: ℝ[10] = sample_normal1D(n)
+    x: ℝ[10, 3] = sample_normal3D(n)
 
-    coulomb_e_n: ℝ[3] = E_n(n, q, x, [1, 1, 1])
+    coulomb_e_n: ℝ[3] = E_n(q, x, [1, 1, 1])
     print(coulomb_e_n)
-
-
-
-
 
 Change in Electric Field w.r.t Position
 ---------------------------------------
@@ -172,6 +168,7 @@ Output:
 
 .. code:: text
 
+    [3459386624.0, 3459386624.0, 3459386624.0] ∈ ℝ[3]
     [[0.0, -3459386880.0, -3459386880.0], [-3459386880.0, 0.0, -3459386880.0], [-3459386880.0, -3459386880.0, 0.0]] ∈ ℝ[3,3]
 
 
@@ -188,7 +185,7 @@ Governing Differential Equation
 For a capacitor of capacitance :math:`C` discharging through a resistor of
 resistance :math:`R`, the current leaving the capacitor is
 :math:`I = -C \, \frac{dV}{dt}`, and Ohm's law gives the current through the
-resistor as :math:`I = V / R`. Setting the two equal gives
+resistor as :math:`I = V / R`. Setting the two equal gives [horowitz]_
 
 .. math::
 
@@ -207,9 +204,9 @@ where :math:`\tau = R C` is the time constant of the circuit.
 Time Integration with RK4
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To calculate the voltage forward in time we use the fourth-order
-Runge-Kutta method (RK4). For an ODE :math:`\frac{dV}{dt} = f(V)` and a time
-step :math:`\Delta t`, one step evaluates four slopes
+To calculate the voltage forward in time we use the fourth-order Runge-Kutta
+method (RK4) [kutta]_. For an ODE :math:`\frac{dV}{dt} = f(V)` and a time step
+:math:`\Delta t`, one step evaluates four slopes
 
 .. math::
 
@@ -259,13 +256,13 @@ which is :math:`0.2\tau`.
 .. code:: text
 
     Capa, Ress, V0: ℝ = 1.0, 10.0, 10.0
-    dt: ℝ = 0.01
+    Δt: ℝ = 0.01
     steps: ℕ = 200
 
-    V_final: ℝ = voltage_at(V0, Capa, Ress, dt, steps)
+    V_final: ℝ = voltage_at(V0, Capa, Ress, Δt, steps)
     print(V_final)
 
-    I_final: ℝ = current_at(V0, Capa, Ress, dt, steps)
+    I_final: ℝ = current_at(V0, Capa, Ress, Δt, steps)
     print(I_final)
 
 Output::
@@ -282,7 +279,7 @@ Comparing with the Analytical Solution
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The RC equation has an exact solution, which gives us a check on the numerical
-result:
+result [horowitz]_ :
 
 .. math::
 
@@ -290,14 +287,17 @@ result:
 
 .. code:: text
 
-    V_exact: ℝ = V0 * exp(-dt * steps / (Ress * Capa))
+    V_exact: ℝ = V0 * exp(-Δt * steps / (Ress * Capa))
     print(V_exact)
 
 Output::
 
     8.187307357788086 ∈ ℝ
 
-The simulated and exact voltages agree to seven significant figures.
+The RK4 result matches the true exact value,
+:math:`V_0 e^{-0.2} = 8.187307530779819`, to about 15 significant figures. The
+printed ``V_exact`` differs from the eighth digit onwards only because ``exp``
+is evaluated in single precision (float32).
 
 Helper Functions
 ----------------
@@ -336,6 +336,8 @@ Full Code
 
 .. code:: text
 
+    # π: pi
+    # ε0: Vacuum Permittivity
     π, ε0: ℝ = 3.14159, 8.854e-12
 
     # p1: Position 1 in 3d space
@@ -382,14 +384,13 @@ Full Code
     print(coulomb_e)
     print(dE_dx2)
 
-    # n: Number of point charges in the system
     # q: Charge of each of the n points
     # x: Positions of each of the n points
     # x2: Position where total electric field is evaluated
     # Electric Field due to many point charges
-    def E_n(n: ℝ, q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
+    def E_n(q: ℝ[n], x: ℝ[n, 3], x2: ℝ[3]): ℝ[3]:
         total: ℝ[3] = [0.0, 0.0, 0.0]
-        for i: ℕ(n):
+        for i:
             total += E(q[i], x[i], x2)
         return total
 
@@ -403,10 +404,10 @@ Full Code
         return t
 
     n: ℝ = 10
-    q : ℝ[3] = sample_normal1D(n)
-    x : ℝ[3, 3] = sample_normal3D(n)
+    q : ℝ[10] = sample_normal1D(n)
+    x : ℝ[10, 3] = sample_normal3D(n)
 
-    coulomb_e_n: ℝ[3] = E_n(n, q, x, [1, 1, 1])
+    coulomb_e_n: ℝ[3] = E_n(q, x, [1, 1, 1])
     print(coulomb_e_n)
 
     # ----------
@@ -455,3 +456,12 @@ References
    magnétisme" [First dissertation on electricity and magnetism]. Histoire de
    l'Académie Royale des Sciences [History of the Royal Academy of Sciences]
    (in French). pp. 569–577.
+
+.. [horowitz] Horowitz, P., & Hill, W. (2015). *The Art of Electronics*
+   (3rd ed.). Cambridge University Press. Section 1.4.2, "RC circuits: V and
+   I versus time", pp. 21–25.
+
+.. [kutta] Kutta, W. (1901). "Beitrag zur näherungsweisen Integration totaler
+   Differentialgleichungen" [Contribution to the approximate integration of
+   total differential equations]. Zeitschrift für Mathematik und Physik
+   (in German). 46: 435–453.
