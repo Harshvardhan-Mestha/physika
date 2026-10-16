@@ -56,6 +56,8 @@ def p_type_scalar(p):
         p[0] = "ℂ"
     elif p[1] == "list":
         p[0] = "list"
+    elif p[1] == "string":
+        p[0] = "string"
     else:
         p[0] = "ℝ"
 
@@ -1248,12 +1250,6 @@ def p_func_factor_array(p):
     p[0] = ("array", p[2])
 
 
-def p_func_factor_string(p):
-    """func_factor : STRING"""
-    # String literal (for equations): 'x0 = a + b'
-    p[0] = ("string", p[1])
-
-
 def p_func_factor_imaginary(p):
     """func_factor : IMAGINARY"""
     # Imaginary unit i
@@ -1420,12 +1416,6 @@ def p_factor_array(p):
     """factor : LBRACKET elements RBRACKET"""
     # Return AST node for array literal
     p[0] = ("array", p[2])
-
-
-def p_factor_string(p):
-    """factor : STRING"""
-    # String literal (for equations and symbolic): 'x0 = a + b'
-    p[0] = ("equation_string", p[1])
 
 
 def p_factor_for_expr_range(p):
