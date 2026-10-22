@@ -27,16 +27,22 @@ def zeros2d(n, m):
 def zeros1d(k):
     return torch.stack([(i * 0.0) for _fi_i in range(int(k)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
 
-def eye(n):
-    I = torch.stack([torch.stack([(j * 0.0) for _fi_j in range(int(n)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
-    for i in range(int(0), int(n)):
-        I[int(i), int(i)] = 1.0
-    return I
+def flatten(J4, n):
+    flat = torch.reshape(J4, ((n * n),) if isinstance((n * n), int) else (n * n))
+    return torch.stack([torch.stack([flat[int(((r * n) + c))] for _fi_c in range(int(n)) for c in [torch.tensor(float(_fi_c), device=DEVICE)]]) for _fi_r in range(int(n)) for r in [torch.tensor(float(_fi_r), device=DEVICE)]])
 
-def df_dh(W, tanh_prime, n=None):
+def I(n):
+    eye = torch.stack([torch.stack([(j * 0.0) for _fi_j in range(int(n)) for j in [torch.tensor(float(_fi_j), device=DEVICE)]]) for _fi_i in range(int(n)) for i in [torch.tensor(float(_fi_i), device=DEVICE)]])
+    for i in range(int(0), int(n)):
+        eye[int(i), int(i)] = 1.0
+    return eye
+
+def f(h, x, W, U, b, n=None, d=None):
     if n is None:
-        n = int(W.shape[0])
-    return torch.stack([torch.as_tensor(torch.stack([torch.as_tensor((W[int(r)][int(c)] * tanh_prime[int(0)][int(c)])) for c in range(int(n))]).float()) for r in range(int(n))])
+        n = int(h.shape[1])
+    if d is None:
+        d = int(x.shape[1])
+    return tanh(((torch.matmul(h, W) + torch.matmul(x, U)) + b))
 
 def gaussian_solve(A, b):
     a_row = get_2d_array_num_rows(A)
@@ -129,21 +135,15 @@ class DEQ(nn.Module):
         self.learnable_params = [self.W, self.U, self.b, self.Wo, self.bo]
         self.h_star = None
 
-    def f(self, h, x):
-        this = self
-        h = torch.as_tensor(h, device=DEVICE).float()
-        x = torch.as_tensor(x, device=DEVICE).float()
-        return tanh((((h @ self.W) + (x @ self.U)) + self.b))
-
     def equilibrium(self, x):
         this = self
         x = torch.as_tensor(x, device=DEVICE).float()
         self.h_star = zeros2d(1, self.n)
-        f_h = self.f(self.h_star, x)
-        tanh_prime = (1.0 - (f_h * f_h))
-        J = (df_dh(self.W, tanh_prime) - eye(self.n))
+        h = self.h_star
+        J = flatten(compute_grad(lambda _dh: f(_dh, x, self.W, self.U, self.b), h), self.n)
+        J = (J - I(self.n))
         for k in range(int(0), int(self.solver_steps)):
-            g = (self.f(self.h_star, x) - self.h_star)
+            g = (f(self.h_star, x, self.W, self.U, self.b) - self.h_star)
             delta = gaussian_solve(J, g[int(0)])
             self.h_star = (self.h_star - torch.stack([torch.as_tensor(delta)]))
         return self.h_star

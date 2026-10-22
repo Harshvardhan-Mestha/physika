@@ -287,16 +287,15 @@ The Physika snippets in this section contain the implementation of the equilibri
 .. code-block:: text
 
     def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
-        num_solver_steps: ℕ = 3
-        h_star: ℝ[1,n] = zeros2d(1, 8)
-        f_h: ℝ[1,n] = f(h_star, x)
-        tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-        J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(8)
-        for k:ℕ(num_solver_steps):
-            g = f(h_star, x) - h_star
+        this.h_star = zeros2d(1, this.n)
+        h: ℝ[1,n] = this.h_star
+        J: ℝ[n,n] = flatten(grad(f(h, x, W, U, b), h), this.n)
+        J: ℝ[n,n] = J - I(this.n)
+        for k:ℕ(this.solver_steps):
+            g = f(this.h_star, x, W, U, b) - this.h_star
             delta = gaussian_solve(J, g[0])
-            h_star = h_star - [delta]
-        return h_star
+            this.h_star = this.h_star - [delta]
+        return this.h_star
 
 Three steps are sufficient as the contraction leaves :math:`h_0 = 0` already close to :math:`h^\star`, so the frozen-Jacobian iteration reaches the equilibrium in a handful of steps.
 The ``sum_2d`` function is a helper that sums all elements of a 2D array and is used to compute the loss.
@@ -343,17 +342,18 @@ The Full Code section contains the complete Physika code, which can be run as-is
 
 .. code-block:: text
 
+    def f(h: ℝ[1,n], x: ℝ[1,d], W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n]): ℝ[1,n]:
+        return tanh(h @ W + x @ U + b)
+
     class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: ℕ, d: ℕ, solver_steps: ℕ):
         h_star: ℝ[1,n]
-        def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
-            return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
             this.h_star = zeros2d(1, this.n)
-            f_h: ℝ[1,n] = this.f(this.h_star, x)
-            tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(this.n)
+            h: ℝ[1,n] = this.h_star
+            J: ℝ[n,n] = flatten(grad(f(h, x, W, U, b), h), this.n)
+            J: ℝ[n,n] = J - I(this.n)
             for k:ℕ(this.solver_steps):
-                g = this.f(this.h_star, x) - this.h_star
+                g = f(this.h_star, x, W, U, b) - this.h_star
                 delta = gaussian_solve(J, g[0])
                 this.h_star = this.h_star - [delta]
             return this.h_star
@@ -489,26 +489,28 @@ More details on this can be found in the `Sampling documentation <https://physik
     def zeros1d(k: ℝ): ℝ[k]:
         return for i:ℕ(k) → i * 0.0
 
-    def eye(n: ℝ): ℝ[n, n]:
-        I: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
-        for i:ℕ(n):
-            I[i, i] = 1.0
-        return I
+    def flatten(J4: ℝ[n, n], n: ℕ): ℝ[n, n]:
+        flat: ℝ[gg] = reshape(J4, n * n)
+        return for r:ℕ(n) → for c:ℕ(n) → flat[r * n + c] 
 
-    def df_dh(W: ℝ[n,n], tanh_prime: ℝ[1,n]): ℝ[n,n]:
-        return for r:ℕ(n) → for c:ℕ(n) → W[r, c] * tanh_prime[0, c]
+    def I(n: ℝ): ℝ[n, n]:
+        eye: ℝ[n, n] = for i:ℕ(n) → for j:ℕ(n) → j * 0.0
+        for i:ℕ(n):
+            eye[i, i] = 1.0
+        return eye
+
+    def f(h: ℝ[1,n], x: ℝ[1,d], W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n]): ℝ[1,n]:
+        return tanh(h @ W + x @ U + b)
 
     class DEQ(W: ℝ[n,n], U: ℝ[d,n], b: ℝ[1,n], Wo: ℝ[n,d], bo: ℝ[1,d], n: ℕ, d: ℕ, solver_steps: ℕ):
         h_star: ℝ[1,n]
-        def f(h: ℝ[1,n], x: ℝ[1,d]): ℝ[1,n]:
-            return tanh(h @ W + x @ U + b)
         def equilibrium(x: ℝ[1,d]): ℝ[1,n]:
             this.h_star = zeros2d(1, this.n)
-            f_h: ℝ[1,n] = this.f(this.h_star, x)
-            tanh_prime: ℝ[1,n] = 1.0 - f_h * f_h
-            J: ℝ[n,n] = df_dh(W, tanh_prime) - eye(this.n)
+            h: ℝ[1,n] = this.h_star
+            J: ℝ[n,n] = flatten(grad(f(h, x, W, U, b), h), this.n)
+            J: ℝ[n,n] = J - I(this.n)
             for k:ℕ(this.solver_steps):
-                g = this.f(this.h_star, x) - this.h_star
+                g = f(this.h_star, x, W, U, b) - this.h_star
                 delta = gaussian_solve(J, g[0])
                 this.h_star = this.h_star - [delta]
             return this.h_star
@@ -518,7 +520,7 @@ More details on this can be found in the `Sampling documentation <https://physik
         def loss(target: ℝ[1,d], x_hat: ℝ[1,d]): ℝ:
             err: ℝ[1,d] = target - x_hat
             return sum_2d(err * err, 1, d)
-        def train(X: ℝ[50,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
+        def train(X: ℝ[10,784], epochs: ℕ, lr: ℝ, images: ℝ): ℝ[epochs]:
             losses: ℝ[epochs] = for i:ℕ(epochs) -> i*0
             for epoch:ℕ(epochs):
                 total = 0
