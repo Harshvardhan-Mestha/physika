@@ -61,21 +61,20 @@ class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
         return u_t + Nu(uu, u_x, u_xx)
     def λ(t: ℝ, x: ℝ) -> ℝ:
         return this.u(t, x)
-    def predict(t: ℝ, Xg: ℝ[10]): ℝ[10]:
-        out: ℝ[10] = for i:ℕ(10) -> i*0.0
-        for i:ℕ(10):
+    def predict(t: ℝ, Xg: ℝ[m]): ℝ[m]:
+        out: ℝ[m] = for i:ℕ(this.m) -> i*0.0
+        for i:ℕ(this.m):
             out[i] = this.u(t, Xg[i])
         return out
-    def loss(Tu: ℝ[10], Xu: ℝ[10], Uu: ℝ[10], Tf: ℝ[10], Xf: ℝ[10]): ℝ:
-        mse_u: ℝ = 0.0
-        for i:ℕ(10):
+    def loss(Tu: ℝ[m], Xu: ℝ[m], Uu: ℝ[m], Tf: ℝ[m], Xf: ℝ[m]): ℝ:
+        mse_u: ℝ, mse_f: ℝ = 0.0, 0.0
+        for i:ℕ(this.m):
             r = this.u(Tu[i], Xu[i]) - Uu[i]
             mse_u += r * r
-        mse_f: ℝ = 0.0
-        for i:ℕ(10):
             fi = this.f(Tf[i], Xf[i])
             mse_f += fi * fi
-        return mse_u / 10.0 + mse_f / 10.0
+        mse: ℝ = (mse_u + mse_f)
+        return mse / this.m
     def update_params(lr: ℝ, learnable_grads: ℝ[1, n]):
         g: ℝ[n] = learnable_grads[0]
         θ: ℝ[n] = this.learnable_params[0]
@@ -87,7 +86,7 @@ class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
         this.gp = g
         this.θ = θ + lr * d
         this.step = this.step + 1.0
-    def train(Tu: ℝ[10], Xu: ℝ[10], Uu: ℝ[10], Tf: ℝ[10], Xf: ℝ[10], epochs: ℕ, lr: ℝ): ℝ[epochs]:
+    def train(Tu: ℝ[m], Xu: ℝ[m], Uu: ℝ[m], Tf: ℝ[m], Xf: ℝ[m], epochs: ℕ, lr: ℝ): ℝ[epochs]:
         this.S = zeros2d(this.m, this.n)
         this.Y = zeros2d(this.m, this.n)
         this.θp = for i:ℕ(this.n) -> i*0.0
@@ -120,9 +119,9 @@ print(DEVICE)
 
 Ni: ℝ = 6
 Nb: ℝ = 2
-Tu: ℝ[10] = for i:ℕ(10) -> i*0.0
-Xu: ℝ[10] = for i:ℕ(10) -> i*0.0
-Uu: ℝ[10] = for i:ℕ(10) -> i*0.0
+Tu: ℝ[m] = zeros(m)
+Xu: ℝ[m] = zeros(m)
+Uu: ℝ[m] = zeros(m)
 for j:ℕ(Ni):
     xj = -1.0 + 2.0 * j / (Ni - 1)
     Xu[j] = xj
@@ -133,16 +132,18 @@ for k:ℕ(Nb):
     Xu[Ni + k] = -1.0
     Tu[Ni + Nb + k] = tk
     Xu[Ni + Nb + k] = 1.0
-Tf: ℝ[10] ~ 𝒰(0.0, 1.0, 10)
-Xf: ℝ[10] ~ 𝒰(-1.0, 1.0, 10)
+Tf: ℝ[m] ~ 𝒰(0.0, 1.0, m)
+Xf: ℝ[m] ~ 𝒰(-1.0, 1.0, m)
 
 epochs: ℕ = 1
 losses: ℝ[epochs] = pinn.train(Tu, Xu, Uu, Tf, Xf, epochs, lr)
 
-Xg: ℝ[10] = for i:ℕ(10) -> -1.0 + 2.0 * i / 9
-pred25: ℝ[10] = pinn.predict(0.25, Xg)
-pred50: ℝ[10] = pinn.predict(0.50, Xg)
-pred75: ℝ[10] = pinn.predict(0.75, Xg)
+Xg: ℝ[m] = zeros(m)
+for i:ℕ(m):
+    Xg[i] = -1.0 + 2.0 * i / (m - 1)
+pred25: ℝ[m] = pinn.predict(0.25, Xg)
+pred50: ℝ[m] = pinn.predict(0.50, Xg)
+pred75: ℝ[m] = pinn.predict(0.75, Xg)
 # exact reference + plotting live in runtime.py, commented for CI
 # exact25: ℝ[10] = burgers_exact(0.25, Xg)
 # exact50: ℝ[10] = burgers_exact(0.50, Xg)
