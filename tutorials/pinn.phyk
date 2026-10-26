@@ -1,36 +1,11 @@
 physika.seed(0)
+from lbfgs import LBFGS, pushrow
+π: ℝ = 3.14159265
 
 def tanh(a: ℝ[p,q]): ℝ[p,q]:
     num: ℝ[p,q] = exp(a) - exp(-a)
     denom: ℝ[p,q] = exp(a) + exp(-a)
     return num / denom
-
-def lbfgs(g: ℝ[n], S: ℝ[m,n], Y: ℝ[m,n], c: ℝ, m: ℕ, n: ℕ): ℝ[n]:
-    α: ℝ[m] = for i:ℕ(m) → i*0
-    q: ℝ[n] = g
-    for p:ℕ(c):
-        ix = m-1-p
-        ρ = 1.0 / (Y[ix] @ S[ix])
-        α[ix] = ρ * (S[ix] @ q)
-        q = q - α[ix] * Y[ix]
-    γ: ℝ = 1.0
-    if c > 0:
-        j = m-1
-        γ = (S[j] @ Y[j]) / (Y[j] @ Y[j])
-    z: ℝ[n] = γ * q
-    for p:ℕ(c):
-        ix = m-c+p
-        ρ = 1.0 / (Y[ix] @ S[ix])
-        β = ρ * (Y[ix] @ z)
-        z = z + S[ix] * (α[ix] - β)
-    return -z
-
-def pushrow(M: ℝ[m,n], row: ℝ[n], m: ℕ): ℝ[m,n]:
-    Mn: ℝ[m,n] = M
-    for j:ℕ(m-1):
-        Mn[j,:] = Mn[j+1,:]
-    Mn[m-1,:] = row
-    return Mn
 
 def mat(θ: ℝ[p], off: ℕ, r: ℕ, c: ℕ): ℝ[r,c]:
     return for i:ℕ(r) -> θ[off + i*c : off + (i+1)*c]
@@ -67,6 +42,9 @@ class Net(H: ℕ):
         out: ℝ = sum(hid[0] * w2) + θ[4*h]
         return out
 
+def Nu(u: ℝ, u_x: ℝ, u_xx: ℝ): ℝ:
+    return u * u_x - (0.01 / π) * u_xx
+
 class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
     S: ℝ[m,n]
     Y: ℝ[m,n]
@@ -80,7 +58,7 @@ class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
         u_t: ℝ = grad(uu, t)
         u_x: ℝ = grad(uu, x)
         u_xx: ℝ = grad(u_x, x)
-        return u_t + uu * u_x - (0.01 / 3.14159265) * u_xx
+        return u_t + Nu(uu, u_x, u_xx)
     def λ(t: ℝ, x: ℝ) -> ℝ:
         return this.u(t, x)
     def predict(t: ℝ, Xg: ℝ[10]): ℝ[10]:
@@ -103,10 +81,8 @@ class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
         θ: ℝ[n] = this.learnable_params[0]
         this.S = pushrow(this.S, θ - this.θp, this.m)
         this.Y = pushrow(this.Y, g - this.gp, this.m)
-        c = this.step
-        if c > this.m * 1.0:
-            c = this.m * 1.0
-        d: ℝ[n] = lbfgs(g, this.S, this.Y, c, this.m, this.n)
+        opt: LBFGS = LBFGS(g, this.S, this.Y, this.step, this.m, this.n)
+        d: ℝ[n] = opt.direction()
         this.θp = θ
         this.gp = g
         this.θ = θ + lr * d
@@ -150,7 +126,7 @@ Uu: ℝ[10] = for i:ℕ(10) -> i*0.0
 for j:ℕ(Ni):
     xj = -1.0 + 2.0 * j / (Ni - 1)
     Xu[j] = xj
-    Uu[j] = -sin(3.14159265 * xj)
+    Uu[j] = -sin(π * xj)
 for k:ℕ(Nb):
     tk = k / (Nb - 1)
     Tu[Ni + k] = tk
