@@ -70,11 +70,10 @@ class PINN(net: Net, θ: ℝ[n], m: ℕ, n: ℕ):
         mse_u: ℝ, mse_f: ℝ = 0.0, 0.0
         for i:ℕ(this.m):
             r = this.u(Tu[i], Xu[i]) - Uu[i]
-            mse_u += r * r
+            mse_u += (r * r)/this.m
             fi = this.f(Tf[i], Xf[i])
-            mse_f += fi * fi
-        mse: ℝ = (mse_u + mse_f)
-        return mse / this.m
+            mse_f += (fi * fi)/this.m
+        return mse_u + mse_f
     def update_params(lr: ℝ, learnable_grads: ℝ[1, n]):
         g: ℝ[n] = learnable_grads[0]
         θ: ℝ[n] = this.learnable_params[0]
